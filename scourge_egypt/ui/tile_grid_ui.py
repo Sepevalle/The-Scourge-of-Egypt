@@ -20,6 +20,7 @@ class TileGridUI:
         self.rect = rect
         self.on_tile_click = on_tile_click
         self.hovered_index: Optional[int] = None
+        self.mouse_pos = (0, 0)
         self.tile_rects: List[pygame.Rect] = []
 
         # 8 losetas dispuestas en 2 filas x 4 columnas
@@ -28,17 +29,19 @@ class TileGridUI:
         padding_x = 8
         padding_y = 8
         tile_w = (rect.width - (cols + 1) * padding_x) // cols
-        tile_h = (rect.height - (rows + 1) * padding_y) // rows
+        header_h = 24
+        tile_h = (rect.height - header_h - (rows + 1) * padding_y) // rows
 
         self.tile_rects = []
         for r in range(rows):
             for c in range(cols):
                 tx = rect.x + padding_x + c * (tile_w + padding_x)
-                ty = rect.y + padding_y + r * (tile_h + padding_y)
+                ty = rect.y + header_h + padding_y + r * (tile_h + padding_y)
                 self.tile_rects.append(pygame.Rect(tx, ty, tile_w, tile_h))
 
     def handle_event(self, event: pygame.event.Event, player: Player) -> bool:
         if event.type == pygame.MOUSEMOTION:
+            self.mouse_pos = event.pos
             self.hovered_index = None
             for idx, r in enumerate(self.tile_rects):
                 if r.collidepoint(event.pos):
@@ -62,6 +65,14 @@ class TileGridUI:
         # Panel contenedor
         pygame.draw.rect(surface, COLOR_BG_PANEL, self.rect, border_radius=8)
         pygame.draw.rect(surface, COLOR_GOLD_DARK, self.rect, width=2, border_radius=8)
+        available = sum(1 for tile in player.losetas_accion if tile.state == "activa")
+        used = sum(1 for tile in player.losetas_accion if tile.state == "usada_boca_abajo")
+        destroyed = sum(1 for tile in player.losetas_accion if tile.state not in ("activa", "usada_boca_abajo"))
+        heading = FontManager.get_font(11, bold=True).render(
+            f"LOSETA DE ACCIÓN     {available} DISPONIBLES  ·  {used} USADAS  ·  {destroyed} DESTRUIDAS",
+            True, COLOR_GOLD_LIGHT
+        )
+        surface.blit(heading, (self.rect.x + 10, self.rect.y + 5))
 
         font_name = FontManager.get_font(13, bold=True)
         font_sub = FontManager.get_font(11)
@@ -96,8 +107,8 @@ class TileGridUI:
             pygame.draw.rect(surface, border_col, rect, width=2 if is_hovered else 1, border_radius=6)
 
             # Icono central de la loseta
-            icon_size = max(8, min(rect.height // 4, 14))
-            icon_center = (rect.centerx, rect.top + rect.height // 2 - 4)
+            icon_size = max(8, min(rect.height // 5, 12))
+            icon_center = (rect.centerx, rect.top + rect.height // 2 - 2)
             icon_col = text_col if tile.state == "activa" else status_col
             draw_tile_icon(surface, tile.name, icon_center, icon_size, icon_col)
 
@@ -118,18 +129,34 @@ class TileGridUI:
 
     def _draw_tooltip(self, surface: pygame.Surface, tile: ActionTile):
         font = FontManager.get_font(12)
-        txt = f"{tile.name} ({tile.symbol_type}): {tile.description}"
-        t_w, t_h = font.size(txt)
-
-        mx, my = pygame.mouse.get_pos()
+        max_w = min(360, surface.get_width() - 32)
+        state_label = {
+            "activa": "DISPONIBLE",
+            "usada_boca_abajo": "USADA ESTE TURNO",
+            "destruida": "DESTRUIDA",
+        }.get(tile.state, tile.state.upper())
+        words = f"{tile.name} · {state_label} · {tile.symbol_type}: {tile.description}".split()
+        lines, line = [], ""
+        for word in words:
+            candidate = f"{line} {word}".strip()
+            if font.size(candidate)[0] <= max_w - 20:
+                line = candidate
+            else:
+                if line:
+                    lines.append(line)
+                line = word
+        if line:
+            lines.append(line)
+        t_w = max((font.size(item)[0] for item in lines), default=0)
+        t_h = len(lines) * 17
+        mx, my = self.mouse_pos
         tip_x = min(surface.get_width() - t_w - 20, max(10, mx - t_w // 2))
-        tip_y = my - 35
+        tip_y = my - t_h - 18
         if tip_y < 5:
-            tip_y = my + 25
+            tip_y = min(surface.get_height() - t_h - 16, my + 25)
 
-        tip_rect = pygame.Rect(tip_x, tip_y, t_w + 14, t_h + 8)
+        tip_rect = pygame.Rect(tip_x, tip_y, t_w + 20, t_h + 12)
         pygame.draw.rect(surface, (15, 12, 18), tip_rect, border_radius=4)
         pygame.draw.rect(surface, COLOR_GOLD, tip_rect, width=1, border_radius=4)
-
-        t_surf = font.render(txt, True, COLOR_PAPYRUS)
-        surface.blit(t_surf, (tip_x + 7, tip_y + 4))
+        for index, item in enumerate(lines):
+            surface.blit(font.render(item, True, COLOR_PAPYRUS), (tip_x + 10, tip_y + 6 + index * 17))

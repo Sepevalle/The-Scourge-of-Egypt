@@ -41,6 +41,7 @@ class GameEngine:
         self.round_number: int = 1
 
         self.current_moses_card: Optional[Card] = None
+        self.moses_card_history: List[Dict[str, Any]] = []
         self.active_commandment: Optional[CommandmentCard] = None
         self.last_drawn_god_card: Optional[GodCard] = None
 
@@ -116,6 +117,12 @@ class GameEngine:
 
         card = self.moses_deck.pop()
         self.current_moses_card = card
+        self.moses_card_history.append({
+            "card": card,
+            "turn": self.turn_number,
+            "round": self.round_number,
+            "faction": self.current_player.nombre_faccion,
+        })
         self.log(f"Moisés revela: [{card.name}] ({card.card_type.upper()}) - {card.description}")
 
         # Si tiene símbolo de mandamiento, añadir cubo

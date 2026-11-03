@@ -8,7 +8,8 @@ from typing import Callable, Optional, List, Tuple
 from scourge_egypt.ui.theme import (
     FontManager, COLOR_GOLD, COLOR_GOLD_LIGHT, COLOR_GOLD_DARK,
     COLOR_BG_PANEL, COLOR_BG_CARD, COLOR_BG_DARK, COLOR_PAPYRUS,
-    COLOR_CRIMSON, COLOR_WHITE, COLOR_GRAY, COLOR_GRAY_DARK, COLOR_BLACK
+    COLOR_CRIMSON, COLOR_EMERALD, COLOR_LAPIS_LIGHT, COLOR_WHITE,
+    COLOR_GRAY, COLOR_GRAY_LIGHT, COLOR_GRAY_DARK, COLOR_BLACK
 )
 from scourge_egypt.ui.audio import SoundManager
 
@@ -210,21 +211,75 @@ class GameLoggerUI:
     def __init__(self, rect: pygame.Rect):
         self.rect = rect
         self.scroll_offset: int = 0
-        self.line_height: int = 20
+        self.line_height: int = 18
         self.font = FontManager.get_font(13)
+        self.filters = ("TODO", "TURNOS", "ALERTAS", "CARTAS", "OTROS")
+        self.active_filter = "TODO"
+        self.filter_rects = {}
+        x = rect.right - 390
+        for label, width in zip(self.filters, (58, 68, 72, 66, 58)):
+            self.filter_rects[label] = pygame.Rect(x, rect.y + 4, width, 18)
+            x += width + 7
+
+    @staticmethod
+    def _category(message: str) -> str:
+        lower = message.lower()
+        if message.startswith("--- Turno") or "comienza la ronda" in lower or "fin de ronda" in lower:
+            return "TURNOS"
+        if "moisés revela:" in lower or lower.startswith("efecto:") or "mandamiento" in lower:
+            return "CARTAS"
+        alerts = ("derrota", "alerta", "aguas cerrándose", "destruida", "sacrifica", "sacrificio", "¡¡")
+        if any(term in lower for term in alerts):
+            return "ALERTAS"
+        return "OTROS"
 
     def handle_event(self, event: pygame.event.Event):
         if event.type == pygame.MOUSEWHEEL:
-            if self.rect.collidepoint(pygame.mouse.get_pos()):
+            if self.rect.collidepoint(getattr(event, "pos", pygame.mouse.get_pos())):
                 self.scroll_offset = max(0, self.scroll_offset - event.y * 2)
+        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            for label, filter_rect in self.filter_rects.items():
+                if filter_rect.collidepoint(event.pos):
+                    self.active_filter = label
+                    self.scroll_offset = 0
+                    break
 
     def draw(self, surface: pygame.Surface, messages: List[str]):
         # Fondo del logger
         pygame.draw.rect(surface, (15, 13, 18), self.rect, border_radius=6)
         pygame.draw.rect(surface, COLOR_GOLD_DARK, self.rect, width=1, border_radius=6)
+        title = FontManager.get_font(11, bold=True).render("REGISTRO", True, COLOR_GOLD_LIGHT)
+        surface.blit(title, (self.rect.x + 10, self.rect.y + 6))
+        for label, filter_rect in self.filter_rects.items():
+            selected = label == self.active_filter
+            pygame.draw.rect(surface, COLOR_GOLD_DARK if selected else COLOR_BG_CARD, filter_rect, border_radius=5)
+            pygame.draw.rect(surface, COLOR_GOLD if selected else COLOR_GRAY_DARK, filter_rect, width=1, border_radius=5)
+            label_surf = FontManager.get_font(9, bold=True).render(label, True, COLOR_WHITE if selected else COLOR_GRAY)
+            surface.blit(label_surf, label_surf.get_rect(center=filter_rect.center))
+        pygame.draw.line(surface, COLOR_GOLD_DARK, (self.rect.x + 8, self.rect.y + 25),
+                         (self.rect.right - 8, self.rect.y + 25), 1)
 
-        visible_lines = (self.rect.height - 12) // self.line_height
-        total_lines = len(messages)
+        # Ajustar cada evento al ancho para conservar el mensaje completo.
+        wrapped_messages = []
+        max_width = self.rect.width - 36
+        for message in messages:
+            category = self._category(message)
+            if self.active_filter != "TODO" and category != self.active_filter:
+                continue
+            current = ""
+            for word in message.split():
+                candidate = f"{current} {word}".strip()
+                if self.font.size(candidate)[0] <= max_width:
+                    current = candidate
+                else:
+                    if current:
+                        wrapped_messages.append((current, category))
+                    current = word
+            if current:
+                wrapped_messages.append((current, category))
+
+        visible_lines = max(1, (self.rect.height - 34) // self.line_height)
+        total_lines = len(wrapped_messages)
 
         # Ajuste de scroll: mantener abajo por defecto si el usuario no ha scrolleado arriba
         max_scroll = max(0, total_lines - visible_lines)
@@ -233,17 +288,17 @@ class GameLoggerUI:
         start_idx = max(0, total_lines - visible_lines - offset)
         end_idx = min(total_lines, start_idx + visible_lines)
 
-        y = self.rect.y + 6
-        for msg in messages[start_idx:end_idx]:
+        y = self.rect.y + 29
+        for msg, category in wrapped_messages[start_idx:end_idx]:
             # Color según contenido del mensaje
             col = COLOR_PAPYRUS
-            if "¡¡" in msg or "DERROTA" in msg or "ALERTA" in msg:
+            if category == "ALERTAS":
                 col = COLOR_CRIMSON
-            elif "ÉXITO" in msg or "VICTORIA" in msg or "MANDAMIENTO" in msg:
+            elif category == "CARTAS" or "ÉXITO" in msg or "VICTORIA" in msg:
                 col = COLOR_GOLD_LIGHT
             elif "Plaga" in msg or "Ira" in msg:
                 col = (230, 140, 70)
-            elif "Turno" in msg or "Ronda" in msg:
+            elif category == "TURNOS":
                 col = (140, 190, 240)
 
             # Truncar texto si excede el ancho
@@ -251,12 +306,194 @@ class GameLoggerUI:
             while self.font.size(rendered_text)[0] > self.rect.width - 24 and len(rendered_text) > 5:
                 rendered_text = rendered_text[:-5] + "..."
 
+            if category == "TURNOS":
+                pygame.draw.rect(surface, (28, 31, 42),
+                                 pygame.Rect(self.rect.x + 5, y - 1, self.rect.width - 15, self.line_height),
+                                 border_radius=3)
             surf = self.font.render(rendered_text, True, col)
             surface.blit(surf, (self.rect.x + 10, y))
             y += self.line_height
 
         # Indicador de scroll si hay muchas líneas
         if max_scroll > 0:
-            thumb_h = max(15, int(self.rect.height * (visible_lines / total_lines)))
-            thumb_y = self.rect.y + int((self.rect.height - thumb_h) * (1.0 - (offset / max_scroll)))
+            thumb_h = max(12, int((self.rect.height - 27) * (visible_lines / total_lines)))
+            thumb_y = self.rect.y + 27 + int((self.rect.height - 27 - thumb_h) * (1.0 - (offset / max_scroll)))
             pygame.draw.rect(surface, COLOR_GOLD_DARK, (self.rect.right - 8, thumb_y, 5, thumb_h), border_radius=2)
+
+
+class CardDetailDialog:
+    """Vista ampliada y desplazable para consultar la descripción completa de una carta."""
+
+    def __init__(self, card, screen_size=(1280, 720), history=None):
+        self.history = history or [{"card": card, "turn": 0, "round": 0, "faction": ""}]
+        self.history_index = max(
+            0,
+            next((i for i, entry in enumerate(self.history) if entry.get("card") is card), len(self.history) - 1),
+        )
+        self.card = self.history[self.history_index].get("card", card)
+        sw, sh = screen_size
+        self.rect = pygame.Rect(0, 0, min(860, sw - 80), min(610, sh - 60))
+        self.rect.center = (sw // 2, sh // 2)
+        self.scroll_offset = 0
+        self.font_title = FontManager.get_font(23, bold=True)
+        self.font_body = FontManager.get_font(17)
+        self.font_hint = FontManager.get_font(12)
+        self.btn_close = Button(
+            pygame.Rect(self.rect.right - 154, self.rect.bottom - 54, 130, 36),
+            "CERRAR",
+            on_click=self.close,
+            font_size=13,
+        )
+        self.btn_previous = Button(
+            pygame.Rect(self.rect.x + 28, self.rect.bottom - 54, 142, 36),
+            "← ANTERIOR",
+            on_click=lambda: self._move_history(-1),
+            font_size=12,
+        )
+        self.btn_next = Button(
+            pygame.Rect(self.rect.x + 182, self.rect.bottom - 54, 142, 36),
+            "SIGUIENTE →",
+            on_click=lambda: self._move_history(1),
+            font_size=12,
+        )
+        self.closed = False
+
+    def _move_history(self, offset):
+        self.history_index = max(0, min(len(self.history) - 1, self.history_index + offset))
+        self.card = self.history[self.history_index].get("card", self.card)
+        self.scroll_offset = 0
+
+    def close(self):
+        self.closed = True
+
+    def handle_event(self, event: pygame.event.Event):
+        if event.type == pygame.KEYDOWN and event.key in (pygame.K_ESCAPE, pygame.K_RETURN):
+            self.close()
+            return True
+        if event.type == pygame.MOUSEWHEEL:
+            self.scroll_offset = max(0, self.scroll_offset - event.y * 3)
+            return True
+        self.btn_previous.enabled = self.history_index > 0
+        self.btn_next.enabled = self.history_index < len(self.history) - 1
+        if self.btn_previous.handle_event(event) or self.btn_next.handle_event(event):
+            return True
+        if self.btn_close.handle_event(event):
+            return True
+        if event.type in (pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP):
+            return True
+        return False
+
+    def _wrap_description(self, max_width):
+        lines = []
+        for paragraph in str(getattr(self.card, "description", "")).splitlines() or [""]:
+            if not paragraph.strip():
+                lines.append("")
+                continue
+            current = ""
+            for word in paragraph.split():
+                candidate = f"{current} {word}".strip()
+                if self.font_body.size(candidate)[0] <= max_width:
+                    current = candidate
+                else:
+                    if current:
+                        lines.append(current)
+                    current = word
+            if current:
+                lines.append(current)
+        return lines
+
+    def _affected_resources(self):
+        text = str(getattr(self.card, "description", "")).lower()
+        groups = [
+            (("ira", "plaga", "tinieblas", "fuego"), "IRA / PLAGAS"),
+            (("trigo", "avena", "cebada", "cosecha", "cultivo", "hambruna"), "COSECHAS"),
+            (("ganado", "vaca", "oveja", "animal"), "GANADO"),
+            (("vivienda", "casa", "poblacion", "población"), "VIVIENDAS"),
+            (("acolito", "acólito", "sacrificio", "tumba"), "ACÓLITOS"),
+            (("fe", "bolsa azul"), "FE"),
+            (("carro", "mar rojo", "agua"), "ÉXODO B"),
+            (("mandamiento", "ley", "moises", "moisés"), "MANDAMIENTOS"),
+        ]
+        labels = [label for terms, label in groups if any(term in text for term in terms)]
+        return labels or ["EFECTO DESCRITO EN LA CARTA"]
+
+    def draw(self, surface: pygame.Surface):
+        overlay = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 205))
+        surface.blit(overlay, (0, 0))
+        pygame.draw.rect(surface, COLOR_BG_PANEL, self.rect, border_radius=12)
+        pygame.draw.rect(surface, COLOR_GOLD, self.rect, width=3, border_radius=12)
+
+        card_type_raw = str(getattr(self.card, "card_type", "carta")).lower()
+        card_type = card_type_raw.upper()
+        type_colors = {
+            "plaga": COLOR_CRIMSON,
+            "personaje": COLOR_LAPIS_LIGHT,
+            "evento": COLOR_GOLD,
+            "edificio": COLOR_EMERALD,
+        }
+        name = str(getattr(self.card, "name", "Carta de Moisés"))
+        badge = self.font_hint.render(card_type, True, type_colors.get(card_type_raw, COLOR_GOLD_LIGHT))
+        surface.blit(badge, (self.rect.x + 28, self.rect.y + 22))
+        title = self.font_title.render(name, True, COLOR_WHITE)
+        surface.blit(title, (self.rect.x + 28, self.rect.y + 46))
+        record = self.history[self.history_index]
+        context = (
+            f"CARTA {self.history_index + 1}/{len(self.history)} · "
+            f"Ronda {record.get('round', '?')} · Turno {record.get('turn', '?')} · {record.get('faction', '')}"
+        )
+        context_surf = self.font_hint.render(context, True, COLOR_GRAY_LIGHT)
+        context_surf_rect = context_surf.get_rect(right=self.rect.right - 28, centery=self.rect.y + 32)
+        surface.blit(context_surf, context_surf_rect)
+
+        resource_labels = self._affected_resources()
+        resource_caption = self.font_hint.render("RECURSOS:", True, COLOR_GOLD_LIGHT)
+        surface.blit(resource_caption, (self.rect.x + 28, self.rect.y + 88))
+        chip_x = self.rect.x + 104
+        chip_y = self.rect.y + 85
+        for label in resource_labels:
+            chip_font = FontManager.get_font(10, bold=True)
+            chip_text = chip_font.render(label, True, COLOR_PAPYRUS)
+            chip = pygame.Rect(chip_x, chip_y, chip_text.get_width() + 18, 19)
+            pygame.draw.rect(surface, COLOR_BG_CARD, chip, border_radius=5)
+            pygame.draw.rect(surface, COLOR_GOLD_DARK, chip, width=1, border_radius=5)
+            surface.blit(chip_text, (chip.x + 9, chip.y + 3))
+            chip_x = chip.right + 7
+
+        divider_y = self.rect.y + 112
+        pygame.draw.line(surface, COLOR_GOLD_DARK,
+                         (self.rect.x + 26, divider_y),
+                         (self.rect.right - 26, divider_y), 1)
+
+        consequence_label = self.font_hint.render("CONSECUENCIA", True, COLOR_GOLD_LIGHT)
+        surface.blit(consequence_label, (self.rect.x + 28, self.rect.y + 118))
+        content = pygame.Rect(self.rect.x + 28, self.rect.y + 140,
+                              self.rect.width - 56, self.rect.height - 214)
+        lines = self._wrap_description(content.width)
+        line_height = 25
+        visible_count = max(1, content.height // line_height)
+        max_scroll = max(0, len(lines) - visible_count)
+        self.scroll_offset = min(self.scroll_offset, max_scroll)
+        old_clip = surface.get_clip()
+        surface.set_clip(content)
+        y = content.y
+        for line in lines[self.scroll_offset:self.scroll_offset + visible_count]:
+            if line:
+                surface.blit(self.font_body.render(line, True, COLOR_PAPYRUS), (content.x, y))
+            y += line_height
+        surface.set_clip(old_clip)
+
+        if max_scroll:
+            track = pygame.Rect(content.right - 5, content.y, 4, content.height)
+            pygame.draw.rect(surface, COLOR_BG_CARD, track, border_radius=2)
+            thumb_h = max(24, int(content.height * visible_count / len(lines)))
+            thumb_y = track.y + int((track.height - thumb_h) * self.scroll_offset / max_scroll)
+            pygame.draw.rect(surface, COLOR_GOLD, (track.x, thumb_y, track.width, thumb_h), border_radius=2)
+
+        hint = self.font_hint.render("Rueda del ratón para desplazarte · Esc para cerrar", True, COLOR_GRAY)
+        surface.blit(hint, (self.rect.x + 28, self.rect.bottom - 74))
+        self.btn_previous.enabled = self.history_index > 0
+        self.btn_next.enabled = self.history_index < len(self.history) - 1
+        self.btn_previous.draw(surface)
+        self.btn_next.draw(surface)
+        self.btn_close.draw(surface)

@@ -161,7 +161,7 @@ class ExodusBView:
             if is_destroyed:
                 bg_col = (10, 20, 35)
                 border_col = (20, 50, 90)
-                txt_col = (50, 80, 120)
+                txt_col = (105, 145, 190)
             elif is_threshold:
                 bg_col = (60, 50, 20)
                 border_col = COLOR_GOLD_LIGHT
@@ -179,7 +179,7 @@ class ExodusBView:
             pygame.draw.rect(surface, border_col, b_rect, width=2 if is_threshold else 1, border_radius=4)
 
             # Etiqueta número o 'AGUA'
-            label = "AGUA" if is_destroyed else (f"{i}★" if is_threshold else str(i))
+            label = "CERRADA" if is_destroyed else (f"{i}*" if is_threshold else str(i))
             num_surf = self.font_small.render(label, True, txt_col)
             surface.blit(num_surf, (bx + 4, y2 + 3))
 
@@ -199,7 +199,11 @@ class ExodusBView:
             cy = cell_rect.y + 24
             # Círculo del carro con el color de su facción
             pygame.draw.circle(surface, p.color, (cx, cy), 6)
-            pygame.draw.circle(surface, COLOR_WHITE if not c.reverse_to_20 else (255, 230, 0), (cx, cy), 6, width=1)
+            outline = COLOR_GOLD_LIGHT if p is engine.current_player else COLOR_WHITE
+            if c.reverse_to_20:
+                outline = (255, 230, 0)
+            pygame.draw.circle(surface, outline, (cx, cy), 7 if p is engine.current_player else 6,
+                               width=2 if p is engine.current_player else 1)
             # ID de carro
             id_surf = self.font_small.render(str(c.carro_id), True, COLOR_BLACK)
             surface.blit(id_surf, (cx - 3, cy - 5))
@@ -232,7 +236,9 @@ class ExodusBView:
         surface.blit(adv_surf, (d_x, d_y + 48))
 
         # Columna 2: Estado del Mar y Peligros
-        sea_x = p_rect.x + 480
+        sea_x = p_rect.x + 650
+        pygame.draw.line(surface, COLOR_GOLD_DARK, (sea_x - 24, p_rect.y + 12),
+                         (sea_x - 24, p_rect.bottom - 12), 1)
         sea_txt = f"Límite Casillas Activas: {engine.board_state.casillas_activas_mar_rojo}/30"
         sea_surf = self.font_body.render(sea_txt, True, COLOR_BLUE_SEA if not engine.board_state.segundo_carro_en_20 else COLOR_CRIMSON)
         surface.blit(sea_surf, (sea_x, d_y + 15))
@@ -241,11 +247,20 @@ class ExodusBView:
         stat_surf = self.font_small.render(status_txt, True, COLOR_PAPYRUS)
         surface.blit(stat_surf, (sea_x, d_y + 38))
 
-        # Resumen de carros escapados
-        escaped_summary = []
-        for p in engine.players:
-            esc = sum(1 for c in p.carros_exodo_b if c.status == "escapado")
-            dest = sum(1 for c in p.carros_exodo_b if c.status == "destruido")
-            escaped_summary.append(f"{p.nombre_faccion}: {esc} a salvo, {dest} caídos")
-        sum_surf = self.font_small.render(" | ".join(escaped_summary), True, COLOR_GOLD)
-        surface.blit(sum_surf, (d_x, d_y + 80))
+        # Resumen de carrera por facción
+        summary_y = d_y + 77
+        summary_x = p_rect.x + 18
+        gap = 8
+        card_w = (p_rect.width - 36 - gap * (len(engine.players) - 1)) // max(1, len(engine.players))
+        for idx, player in enumerate(engine.players):
+            cars = player.carros_exodo_b
+            outbound = sum(1 for car in cars if car.status == "en_carrera" and not car.reverse_to_20)
+            returning = sum(1 for car in cars if car.status == "en_carrera" and car.reverse_to_20)
+            escaped = sum(1 for car in cars if car.status == "escapado")
+            destroyed = sum(1 for car in cars if car.status == "destruido")
+            badge = pygame.Rect(summary_x + idx * (card_w + gap), summary_y, card_w, 25)
+            pygame.draw.rect(surface, (22, 20, 29), badge, border_radius=4)
+            pygame.draw.rect(surface, player.color, badge, width=1, border_radius=4)
+            summary = f"{player.nombre_faccion}: {outbound} ida · {returning} vuelta · {escaped} a salvo · {destroyed} fuera"
+            summary_surf = self.font_small.render(summary, True, COLOR_PAPYRUS)
+            surface.blit(summary_surf, summary_surf.get_rect(center=badge.center))

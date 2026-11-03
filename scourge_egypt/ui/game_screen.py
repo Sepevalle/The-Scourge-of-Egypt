@@ -17,7 +17,7 @@ from scourge_egypt.ui.theme import (
     COLOR_CRIMSON, COLOR_CRIMSON_DARK, COLOR_EMERALD,
     COLOR_WHITE, COLOR_GRAY, COLOR_GRAY_DARK, COLOR_BLACK
 )
-from scourge_egypt.ui.components import Button, ModalDialog, GameLoggerUI
+from scourge_egypt.ui.components import Button, ModalDialog, GameLoggerUI, CardDetailDialog
 from scourge_egypt.ui.board_renderer import BoardRenderer
 from scourge_egypt.ui.solar_wheel_ui import SolarWheelUI
 from scourge_egypt.ui.tile_grid_ui import TileGridUI
@@ -29,10 +29,13 @@ from scourge_egypt.ui.icons import draw_icon_ankh, draw_icon_eye_of_horus, draw_
 
 class ScreenManager:
     def __init__(self, surface: pygame.Surface):
-        self.surface = surface
+        self.display_surface = surface
+        self.surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
         self.current_screen: str = "MENU"   # 'MENU', 'GAME', 'RULES', 'GAME_OVER'
 
         self.engine: Optional[GameEngine] = None
+        self.turn_start_snapshot: Dict[str, int] = {}
+        self.resource_trends: Dict[str, int] = {}
         self.board_renderer = BoardRenderer()
         self.sound_manager = SoundManager.get_instance()
 
@@ -50,6 +53,7 @@ class ScreenManager:
         self.exodus_b_view = ExodusBView(rect=pygame.Rect(20, 85, 1240, 495))
 
         self.active_modal: Optional[ModalDialog] = None
+        self.card_detail: Optional[CardDetailDialog] = None
         self.rules_scroll: int = 0
         self.tutorial_screen = TutorialScreen(surface=self.surface, on_exit=lambda: self.set_screen("MENU"))
 
@@ -143,6 +147,15 @@ class ScreenManager:
             on_click=self._on_draw_moses,
             font_size=13
         )
+        self.btn_card_details = Button(
+            rect=pygame.Rect(1040, 86, 200, 30),
+            text="VER DETALLE COMPLETO",
+            on_click=self._open_card_details,
+            font_size=11,
+            color_bg=COLOR_LAPIS,
+            color_hover=COLOR_LAPIS_LIGHT,
+            color_text=COLOR_WHITE,
+        )
         self.btn_roll_wheel = Button(
             rect=pygame.Rect(95, 330, 230, 36),
             text="GRACIA DEL FARAÓN (D6)",
@@ -186,21 +199,29 @@ class ScreenManager:
 
     def set_screen(self, screen_name: str):
         self.current_screen = screen_name
+        if screen_name != "GAME":
+            self.card_detail = None
         self.sound_manager.play("click")
 
     def start_new_game(self):
+        self.card_detail = None
         self.engine = GameEngine(
             num_players=self.num_players,
             faction_indices=self.selected_factions[:self.num_players]
         )
         self.engine.start_turn()
+        self.resource_trends = {}
+        self.turn_start_snapshot = self._capture_resource_snapshot()
         self.current_screen = "GAME"
         self.sound_manager.play("fanfare")
 
     def load_game(self):
         loaded = load_game_from_file("partida_guardada.json")
         if loaded:
+            self.card_detail = None
             self.engine = loaded
+            self.resource_trends = {}
+            self.turn_start_snapshot = self._capture_resource_snapshot()
             self.current_screen = "GAME"
             self.sound_manager.play("fanfare")
         else:
@@ -229,6 +250,16 @@ class ScreenManager:
                 on_select=self._on_resolve_modal_choice,
                 screen_size=(SCREEN_WIDTH, SCREEN_HEIGHT)
             )
+
+    def _open_card_details(self):
+        if not self.engine or not self.engine.current_moses_card:
+            return
+        history = getattr(self.engine, "moses_card_history", [])
+        self.card_detail = CardDetailDialog(
+            self.engine.current_moses_card,
+            (SCREEN_WIDTH, SCREEN_HEIGHT),
+            history,
+        )
 
     def _on_resolve_modal_choice(self, option_index: int):
         if self.engine and self.engine.pending_choice:
@@ -295,8 +326,29 @@ class ScreenManager:
     def _on_end_turn(self):
         if not self.engine:
             return
+        current = self._capture_resource_snapshot()
+        self.resource_trends = {
+            key: current.get(key, 0) - self.turn_start_snapshot.get(key, current.get(key, 0))
+            for key in current
+        }
         self.engine.end_turn()
+        self.turn_start_snapshot = self._capture_resource_snapshot()
         self.sound_manager.play("click")
+
+    def _capture_resource_snapshot(self) -> Dict[str, int]:
+        if not self.engine:
+            return {}
+        board = self.engine.board_state
+        return {
+            "ira": board.ira_de_dios,
+            "trigo": board.cosechas.get("trigo", 0),
+            "avena": board.cosechas.get("avena", 0),
+            "cebada": board.cosechas.get("cebada", 0),
+            "ganado": board.ganado,
+            "viviendas": board.viviendas,
+            "fe_bolsa": len(board.bolsa_almacenamiento_fe),
+            "tumbas": len(board.bolsa_tumbas_egipcias),
+        }
 
     def _on_save_game(self):
         if self.engine:
@@ -307,6 +359,16 @@ class ScreenManager:
     # BUCLE DE EVENTOS Y ACTUALIZACIÓN
     # -------------------------------------------------------------
     def handle_event(self, event: pygame.event.Event):
+        # Mantener coordenadas lógicas para que la interfaz responda también
+        # cuando la ventana tenga un tamaño distinto al diseño de referencia.
+        if hasattr(event, "pos") or event.type == pygame.MOUSEWHEEL:
+            scale = min(self.display_surface.get_width() / SCREEN_WIDTH,
+                        self.display_surface.get_height() / SCREEN_HEIGHT)
+            ox = (self.display_surface.get_width() - SCREEN_WIDTH * scale) / 2
+            oy = (self.display_surface.get_height() - SCREEN_HEIGHT * scale) / 2
+            raw_pos = getattr(event, "pos", pygame.mouse.get_pos())
+            pos = ((raw_pos[0] - ox) / scale, (raw_pos[1] - oy) / scale)
+            event = pygame.event.Event(event.type, {**event.dict, "pos": pos})
         if self.current_screen == "MENU":
             self._handle_menu_events(event)
         elif self.current_screen == "GAME":
@@ -338,6 +400,11 @@ class ScreenManager:
         if self.active_modal:
             self.active_modal.handle_event(event)
             return
+        if self.card_detail:
+            self.card_detail.handle_event(event)
+            if self.card_detail.closed:
+                self.card_detail = None
+            return
 
         self.logger_ui.handle_event(event)
 
@@ -352,6 +419,15 @@ class ScreenManager:
         # En Éxodo A
         if self.engine.board_state.fase_actual in ("VICTORIA", "DERROTA"):
             self.set_screen("GAME_OVER")
+            return
+
+        card_rect = pygame.Rect(720, 85, 535, 120)
+        self.btn_card_details.enabled = self.engine.current_moses_card is not None
+        if self.btn_card_details.handle_event(event):
+            return
+        if (event.type == pygame.MOUSEBUTTONDOWN and event.button == 1
+                and card_rect.collidepoint(event.pos) and self.engine.current_moses_card):
+            self._open_card_details()
             return
 
         self.btn_draw_moses.handle_event(event)
@@ -394,6 +470,14 @@ class ScreenManager:
             self._draw_rules()
         elif self.current_screen == "GAME_OVER":
             self._draw_game_over()
+
+        scale = min(self.display_surface.get_width() / SCREEN_WIDTH,
+                    self.display_surface.get_height() / SCREEN_HEIGHT)
+        size = (max(1, int(SCREEN_WIDTH * scale)), max(1, int(SCREEN_HEIGHT * scale)))
+        rendered = pygame.transform.smoothscale(self.surface, size)
+        self.display_surface.fill(COLOR_BLACK)
+        self.display_surface.blit(rendered, ((self.display_surface.get_width() - size[0]) // 2,
+                                             (self.display_surface.get_height() - size[1]) // 2))
 
     def _draw_menu(self):
         cx = SCREEN_WIDTH // 2
@@ -455,16 +539,19 @@ class ScreenManager:
             self.engine.board_state,
             self.engine.current_player,
             self.engine.turn_number,
-            self.engine.round_number
+            self.engine.round_number,
+            self.engine.turn_subphase,
+            self.engine.actions_remaining_this_turn,
+            self.resource_trends,
         )
 
         # 2. Tracks de Cosechas
         cosecha_rect = pygame.Rect(20, 85, 390, 150)
-        self.board_renderer.draw_harvest_tracks(self.surface, self.engine.board_state, cosecha_rect)
+        self.board_renderer.draw_harvest_tracks(self.surface, self.engine.board_state, cosecha_rect, self.resource_trends)
 
         # 3. Reservas y Bolsas Sagradas
         reserva_rect = pygame.Rect(425, 85, 275, 150)
-        self.board_renderer.draw_reserves_and_bags(self.surface, self.engine.board_state, self.engine.num_players, reserva_rect)
+        self.board_renderer.draw_reserves_and_bags(self.surface, self.engine.board_state, self.engine.num_players, reserva_rect, self.resource_trends)
 
         # 4. Carta de Moisés Activa
         card_rect = pygame.Rect(720, 85, 535, 120)
@@ -474,6 +561,8 @@ class ScreenManager:
             self.engine.active_commandment,
             card_rect
         )
+        self.btn_card_details.enabled = self.engine.current_moses_card is not None
+        self.btn_card_details.draw(self.surface)
 
         # 5. Rueda Solar Interactiva
         active_god_names = [g.god_name for g in self.engine.current_player.dioses_activos]
@@ -490,9 +579,15 @@ class ScreenManager:
 
         # Contador de acciones restantes este turno
         font_act = FontManager.get_font(13, bold=True)
-        act_txt = f"Acciones Loseta Restantes: {self.engine.actions_remaining_this_turn}"
+        act_txt = f"ACCIONES RESTANTES: {self.engine.actions_remaining_this_turn}"
         act_surf = font_act.render(act_txt, True, COLOR_GOLD_LIGHT)
-        self.surface.blit(act_surf, (725, 255))
+        act_badge = pygame.Rect(720, 249, 535, 22)
+        pygame.draw.rect(self.surface, COLOR_BG_PANEL, act_badge, border_radius=5)
+        pygame.draw.rect(self.surface, COLOR_GOLD_DARK, act_badge, width=1, border_radius=5)
+        self.surface.blit(act_surf, (act_badge.x + 9, act_badge.y + 3))
+        for action_idx in range(4):
+            dot_color = COLOR_GOLD if action_idx < self.engine.actions_remaining_this_turn else COLOR_GRAY_DARK
+            pygame.draw.circle(self.surface, dot_color, (act_badge.right - 72 + action_idx * 15, act_badge.centery), 4)
 
         # 7. Grid de Losetas del Jugador
         self.tile_grid.draw(self.surface, self.engine.current_player)
@@ -503,6 +598,8 @@ class ScreenManager:
         # 9. Modal de decisión si está activo
         if self.active_modal:
             self.active_modal.draw(self.surface)
+        if self.card_detail:
+            self.card_detail.draw(self.surface)
 
     def _draw_rules(self):
         cx = SCREEN_WIDTH // 2

@@ -59,7 +59,8 @@ async def main():
     pygame.font.init()
 
     # Configuración de ventana
-    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+    window_flags = 0 if sys.platform == "emscripten" else pygame.RESIZABLE
+    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), window_flags)
     pygame.display.set_caption("The Scourge of Egypt - Plagas, Faraón y el Mar Rojo")
 
     # Icono de ventana (generar superficie dorada con jeroglífico estilizado)
@@ -77,6 +78,9 @@ async def main():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+            elif event.type == pygame.VIDEORESIZE and sys.platform != "emscripten":
+                screen = pygame.display.set_mode(event.size, pygame.RESIZABLE)
+                screen_manager.display_surface = screen
             else:
                 screen_manager.handle_event(event)
 

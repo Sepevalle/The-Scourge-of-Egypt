@@ -51,6 +51,15 @@ def save_game_to_file(engine: GameEngine, filepath: str = "partida_guardada.json
             "board_state": engine.board_state.to_dict(),
             "players": [p.to_dict() for p in engine.players],
             "current_moses_card": serialize_card(engine.current_moses_card),
+            "moses_card_history": [
+                {
+                    "card": serialize_card(entry["card"]),
+                    "turn": entry.get("turn", 0),
+                    "round": entry.get("round", 0),
+                    "faction": entry.get("faction", ""),
+                }
+                for entry in engine.moses_card_history
+            ],
             "active_commandment": serialize_card(engine.active_commandment),
             "moses_deck": [serialize_card(c) for c in engine.moses_deck],
             "gods_deck": [serialize_card(g) for g in engine.gods_deck],
@@ -85,6 +94,23 @@ def load_game_from_file(filepath: str = "partida_guardada.json") -> Optional[Gam
         engine.players = [Player.from_dict(pd) for pd in data["players"]]
 
         engine.current_moses_card = deserialize_card(data.get("current_moses_card"))
+        engine.moses_card_history = [
+            {
+                "card": deserialize_card(entry.get("card")),
+                "turn": entry.get("turn", 0),
+                "round": entry.get("round", 0),
+                "faction": entry.get("faction", ""),
+            }
+            for entry in data.get("moses_card_history", [])
+            if entry.get("card")
+        ]
+        if not engine.moses_card_history and engine.current_moses_card:
+            engine.moses_card_history.append({
+                "card": engine.current_moses_card,
+                "turn": engine.turn_number,
+                "round": engine.round_number,
+                "faction": engine.current_player.nombre_faccion,
+            })
         engine.active_commandment = deserialize_card(data.get("active_commandment"))
 
         if "moses_deck" in data:

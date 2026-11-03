@@ -28,7 +28,7 @@ class BoardRenderer:
         self.font_small = FontManager.get_font(11)
         self.font_body = FontManager.get_font(12)
 
-    def draw_hud(self, surface: pygame.Surface, board_state: BoardState, player: Player, turn_num: int, round_num: int):
+    def draw_hud(self, surface: pygame.Surface, board_state: BoardState, player: Player, turn_num: int, round_num: int, subphase: str = "", actions_remaining: int = 0, trends: Optional[Dict[str, int]] = None):
         """Dibuja la barra superior del HUD (Ira de Dios, Mandamientos y Datos de Turno)."""
         sw = surface.get_width()
         hud_h = 70
@@ -41,7 +41,9 @@ class BoardRenderer:
         title_surf = self.font_header.render("THE SCOURGE OF EGYPT", True, COLOR_GOLD_LIGHT)
         surface.blit(title_surf, (15, 12))
 
-        sub_txt = f"Ronda {round_num} | Turno {turn_num} | Fase: {board_state.fase_actual}"
+        phase_names = {"DRAW_MOSES": "ROBA CARTA", "ACTIONS": "ELIGE ACCIONES", "END_TURN": "CIERRA TURNO"}
+        phase = phase_names.get(subphase, subphase.replace("_", " ") if subphase else board_state.fase_actual)
+        sub_txt = f"RONDA {round_num}  |  TURNO {turn_num}  |  {phase}"
         sub_surf = self.font_small.render(sub_txt, True, COLOR_PAPYRUS)
         surface.blit(sub_surf, (15, 42))
 
@@ -56,7 +58,11 @@ class BoardRenderer:
         # Icono de llama
         draw_icon_flame(surface, (ira_x + 8, ira_y + 8), 7, COLOR_CRIMSON)
 
-        ira_lbl = self.font_sub.render(f"Ira de Dios: {ira_val}/50 (+{pot} Potencia)", True, COLOR_GOLD_LIGHT)
+        ira_delta = (trends or {}).get("ira", 0)
+        ira_lbl = self.font_sub.render(
+            f"Ira de Dios: {ira_val}/50 (+{pot} Potencia) {self._trend_mark(ira_delta)}",
+            True, COLOR_GOLD_LIGHT
+        )
         surface.blit(ira_lbl, (ira_x + 20, ira_y))
 
         # Barra
@@ -109,14 +115,14 @@ class BoardRenderer:
         pygame.draw.rect(surface, COLOR_BG_CARD, (p_x, p_y, 265, 54), border_radius=6)
         pygame.draw.rect(surface, player.color, (p_x, p_y, 265, 54), width=2, border_radius=6)
 
-        p_name_surf = self.font_sub.render(f"Turno: {player.nombre_faccion}", True, player.color)
+        p_name_surf = self.font_sub.render(f"JUEGA AHORA: {player.nombre_faccion}", True, player.color)
         surface.blit(p_name_surf, (p_x + 8, p_y + 6))
 
         stats_txt = f"Acólitos: {player.reserva_acolitos} | Fe: {player.tokens_fe} | Rerolls: {player.rerolls_disponibles}"
         stats_surf = self.font_small.render(stats_txt, True, COLOR_PAPYRUS)
         surface.blit(stats_surf, (p_x + 8, p_y + 30))
 
-    def draw_harvest_tracks(self, surface: pygame.Surface, board_state: BoardState, rect: pygame.Rect):
+    def draw_harvest_tracks(self, surface: pygame.Surface, board_state: BoardState, rect: pygame.Rect, trends: Optional[Dict[str, int]] = None):
         """Dibuja los tracks de Cosechas (Trigo, Avena, Cebada)."""
         pygame.draw.rect(surface, COLOR_BG_PANEL, rect, border_radius=8)
         pygame.draw.rect(surface, COLOR_GOLD_DARK, rect, width=2, border_radius=8)
@@ -131,7 +137,7 @@ class BoardRenderer:
         ]
 
         start_y = rect.y + 40
-        track_w = rect.width - 125
+        track_w = rect.width - 155
         num_steps = 11  # 0..10
 
         for i, (key, name, color) in enumerate(crops):
@@ -166,17 +172,17 @@ class BoardRenderer:
             pygame.draw.rect(surface, COLOR_WHITE, marker_rect, width=1, border_radius=2)
 
             # Valor numérico
-            val_txt = f"{val}/10"
+            val_txt = f"{val}/10{self._trend_mark((trends or {}).get(key, 0))}"
             v_col = COLOR_CRIMSON if val >= 10 else ((240, 160, 50) if val >= 5 else COLOR_PAPYRUS)
             v_surf = self.font_small.render(val_txt, True, v_col)
             surface.blit(v_surf, (tx + track_w + 10, ty + 2))
 
         # Leyenda pequeña
-        ley_txt = "Pos. >= 5: Alerta Hambruna | Pos. 10: Agotamiento (-1 Ganado)"
-        ley_surf = self.font_small.render(ley_txt, True, COLOR_GRAY)
+        ley_txt = "5: HAMBRUNA | 10: AGOTAMIENTO | ↑↓ cambio/turno"
+        ley_surf = FontManager.get_font(10).render(ley_txt, True, COLOR_PAPYRUS)
         surface.blit(ley_surf, (rect.x + 15, rect.bottom - 22))
 
-    def draw_reserves_and_bags(self, surface: pygame.Surface, board_state: BoardState, num_players: int, rect: pygame.Rect):
+    def draw_reserves_and_bags(self, surface: pygame.Surface, board_state: BoardState, num_players: int, rect: pygame.Rect, trends: Optional[Dict[str, int]] = None):
         """Dibuja contadores de Ganado, Viviendas, Bolsa Negra y Bolsa Azul."""
         pygame.draw.rect(surface, COLOR_BG_PANEL, rect, border_radius=8)
         pygame.draw.rect(surface, COLOR_GOLD_DARK, rect, width=2, border_radius=8)
@@ -189,13 +195,15 @@ class BoardRenderer:
         g_surf = self.font_body.render(g_txt, True, (245, 245, 245))
         draw_icon_cow(surface, (rect.x + 22, rect.y + 41), 9, (230, 230, 230))
         surface.blit(g_surf, (rect.x + 38, rect.y + 33))
+        self._draw_trend(surface, rect, rect.y + 35, (trends or {}).get("ganado", 0))
 
         # 2. Viviendas (Icono Casa/Pirámide)
         v_col = COLOR_CRIMSON if board_state.viviendas <= 5 else (180, 180, 190)
-        v_txt = f"Viviendas: {board_state.viviendas} cubos"
+        v_txt = f"Viviendas: {board_state.viviendas} cubos" + ("  |  NIVEL CRÍTICO" if board_state.viviendas <= 5 else "")
         v_surf = self.font_body.render(v_txt, True, v_col)
         draw_icon_house(surface, (rect.x + 22, rect.y + 61), 8, v_col)
         surface.blit(v_surf, (rect.x + 38, rect.y + 53))
+        self._draw_trend(surface, rect, rect.y + 55, (trends or {}).get("viviendas", 0))
 
         # 3. Bolsa Negra (Icono Calavera)
         num_sac = len(board_state.bolsa_tumbas_egipcias)
@@ -203,6 +211,7 @@ class BoardRenderer:
         bn_surf = self.font_body.render(b_negra_txt, True, (210, 110, 120))
         draw_icon_skull(surface, (rect.x + 22, rect.y + 81), 8, COLOR_CRIMSON)
         surface.blit(bn_surf, (rect.x + 38, rect.y + 73))
+        self._draw_trend(surface, rect, rect.y + 75, (trends or {}).get("tumbas", 0))
 
         # 4. Bolsa Azul (Icono Estrella / Fe)
         req_fe = REQUISITO_FE_EXODO_A.get(num_players, 45)
@@ -212,6 +221,27 @@ class BoardRenderer:
         ba_surf = self.font_body.render(b_azul_txt, True, fe_col)
         draw_icon_star(surface, (rect.x + 22, rect.y + 101), 8, COLOR_LAPIS_LIGHT)
         surface.blit(ba_surf, (rect.x + 38, rect.y + 93))
+        self._draw_trend(surface, rect, rect.y + 95, (trends or {}).get("fe_bolsa", 0))
+        faith_bar = pygame.Rect(rect.x + 38, rect.y + 116, rect.width - 55, 9)
+        pygame.draw.rect(surface, COLOR_BG_CARD, faith_bar, border_radius=4)
+        ratio = min(1.0, cur_fe / max(1, req_fe))
+        if ratio:
+            fill = pygame.Rect(faith_bar.x, faith_bar.y, max(4, int(faith_bar.width * ratio)), faith_bar.height)
+            pygame.draw.rect(surface, COLOR_LAPIS_LIGHT if cur_fe < req_fe else COLOR_GOLD, fill, border_radius=4)
+        pygame.draw.rect(surface, COLOR_GOLD_DARK, faith_bar, width=1, border_radius=4)
+
+    @staticmethod
+    def _trend_mark(delta: int) -> str:
+        if delta > 0:
+            return f"↑{delta}"
+        if delta < 0:
+            return f"↓{abs(delta)}"
+        return "→"
+
+    def _draw_trend(self, surface: pygame.Surface, rect: pygame.Rect, y: int, delta: int):
+        color = COLOR_GOLD_LIGHT if delta else COLOR_GRAY
+        text = FontManager.get_font(10, bold=True).render(self._trend_mark(delta), True, color)
+        surface.blit(text, text.get_rect(right=rect.right - 10, centery=y))
 
     def draw_active_card_area(self, surface: pygame.Surface, card: Optional[Card], commandment: Optional[CommandmentCard], rect: pygame.Rect):
         """Dibuja la carta actual de Moisés revelada y el mandamiento activo."""
@@ -259,12 +289,12 @@ class BoardRenderer:
             surface.blit(n_surf, (c_rect.x + 10, c_rect.y + 30))
 
             # Descripción con salto de línea
-            self._render_multiline_text(surface, card.description, c_rect.x + 10, c_rect.y + 55, c_rect.width - 20)
+            self._render_multiline_text(surface, card.description, c_rect.x + 10, c_rect.y + 55, c_rect.width - 20, c_rect.bottom - 5)
         else:
             no_card = self.font_body.render("Pulsa 'Robar Carta de Moisés' para iniciar el turno.", True, COLOR_GRAY)
             surface.blit(no_card, (rect.x + 20, rect.y + 40))
 
-    def _render_multiline_text(self, surface: pygame.Surface, text: str, x: int, y: int, max_w: int):
+    def _render_multiline_text(self, surface: pygame.Surface, text: str, x: int, y: int, max_w: int, bottom: int):
         words = text.split(" ")
         lines = []
         cur = ""
@@ -279,7 +309,11 @@ class BoardRenderer:
             lines.append(cur)
 
         cur_y = y
-        for l in lines[:5]:
+        max_lines = max(1, (bottom - y) // 16)
+        visible_lines = lines[:max_lines]
+        if len(lines) > max_lines and visible_lines:
+            visible_lines[-1] = visible_lines[-1].rstrip(" .") + "..."
+        for l in visible_lines:
             surf = self.font_small.render(l, True, COLOR_PAPYRUS)
             surface.blit(surf, (x, cur_y))
-            cur_y += 18
+            cur_y += 16
