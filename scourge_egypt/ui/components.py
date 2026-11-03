@@ -8,7 +8,8 @@ from typing import Callable, Optional, List, Tuple
 from scourge_egypt.ui.theme import (
     FontManager, COLOR_GOLD, COLOR_GOLD_LIGHT, COLOR_GOLD_DARK,
     COLOR_BG_PANEL, COLOR_BG_CARD, COLOR_BG_DARK, COLOR_PAPYRUS,
-    COLOR_CRIMSON, COLOR_WHITE, COLOR_GRAY, COLOR_GRAY_DARK, COLOR_BLACK
+    COLOR_CRIMSON, COLOR_EMERALD, COLOR_LAPIS_LIGHT, COLOR_WHITE,
+    COLOR_GRAY, COLOR_GRAY_LIGHT, COLOR_GRAY_DARK, COLOR_BLACK
 )
 from scourge_egypt.ui.audio import SoundManager
 
