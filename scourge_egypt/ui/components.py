@@ -215,7 +215,7 @@ class GameLoggerUI:
 
     def handle_event(self, event: pygame.event.Event):
         if event.type == pygame.MOUSEWHEEL:
-            if self.rect.collidepoint(pygame.mouse.get_pos()):
+            if self.rect.collidepoint(getattr(event, "pos", pygame.mouse.get_pos())):
                 self.scroll_offset = max(0, self.scroll_offset - event.y * 2)
 
     def draw(self, surface: pygame.Surface, messages: List[str]):
@@ -223,8 +223,24 @@ class GameLoggerUI:
         pygame.draw.rect(surface, (15, 13, 18), self.rect, border_radius=6)
         pygame.draw.rect(surface, COLOR_GOLD_DARK, self.rect, width=1, border_radius=6)
 
+        # Ajustar cada evento al ancho para conservar el mensaje completo.
+        wrapped_messages = []
+        max_width = self.rect.width - 24
+        for message in messages:
+            current = ""
+            for word in message.split():
+                candidate = f"{current} {word}".strip()
+                if self.font.size(candidate)[0] <= max_width:
+                    current = candidate
+                else:
+                    if current:
+                        wrapped_messages.append(current)
+                    current = word
+            if current:
+                wrapped_messages.append(current)
+
         visible_lines = (self.rect.height - 12) // self.line_height
-        total_lines = len(messages)
+        total_lines = len(wrapped_messages)
 
         # Ajuste de scroll: mantener abajo por defecto si el usuario no ha scrolleado arriba
         max_scroll = max(0, total_lines - visible_lines)
@@ -234,7 +250,7 @@ class GameLoggerUI:
         end_idx = min(total_lines, start_idx + visible_lines)
 
         y = self.rect.y + 6
-        for msg in messages[start_idx:end_idx]:
+        for msg in wrapped_messages[start_idx:end_idx]:
             # Color según contenido del mensaje
             col = COLOR_PAPYRUS
             if "¡¡" in msg or "DERROTA" in msg or "ALERTA" in msg:

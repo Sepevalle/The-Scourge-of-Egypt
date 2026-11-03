@@ -29,7 +29,8 @@ from scourge_egypt.ui.icons import draw_icon_ankh, draw_icon_eye_of_horus, draw_
 
 class ScreenManager:
     def __init__(self, surface: pygame.Surface):
-        self.surface = surface
+        self.display_surface = surface
+        self.surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
         self.current_screen: str = "MENU"   # 'MENU', 'GAME', 'RULES', 'GAME_OVER'
 
         self.engine: Optional[GameEngine] = None
@@ -307,6 +308,16 @@ class ScreenManager:
     # BUCLE DE EVENTOS Y ACTUALIZACIÓN
     # -------------------------------------------------------------
     def handle_event(self, event: pygame.event.Event):
+        # Mantener coordenadas lógicas para que la interfaz responda también
+        # cuando la ventana tenga un tamaño distinto al diseño de referencia.
+        if hasattr(event, "pos") or event.type == pygame.MOUSEWHEEL:
+            scale = min(self.display_surface.get_width() / SCREEN_WIDTH,
+                        self.display_surface.get_height() / SCREEN_HEIGHT)
+            ox = (self.display_surface.get_width() - SCREEN_WIDTH * scale) / 2
+            oy = (self.display_surface.get_height() - SCREEN_HEIGHT * scale) / 2
+            raw_pos = getattr(event, "pos", pygame.mouse.get_pos())
+            pos = ((raw_pos[0] - ox) / scale, (raw_pos[1] - oy) / scale)
+            event = pygame.event.Event(event.type, {**event.dict, "pos": pos})
         if self.current_screen == "MENU":
             self._handle_menu_events(event)
         elif self.current_screen == "GAME":
@@ -395,6 +406,14 @@ class ScreenManager:
         elif self.current_screen == "GAME_OVER":
             self._draw_game_over()
 
+        scale = min(self.display_surface.get_width() / SCREEN_WIDTH,
+                    self.display_surface.get_height() / SCREEN_HEIGHT)
+        size = (max(1, int(SCREEN_WIDTH * scale)), max(1, int(SCREEN_HEIGHT * scale)))
+        rendered = pygame.transform.smoothscale(self.surface, size)
+        self.display_surface.fill(COLOR_BLACK)
+        self.display_surface.blit(rendered, ((self.display_surface.get_width() - size[0]) // 2,
+                                             (self.display_surface.get_height() - size[1]) // 2))
+
     def _draw_menu(self):
         cx = SCREEN_WIDTH // 2
 
@@ -455,7 +474,9 @@ class ScreenManager:
             self.engine.board_state,
             self.engine.current_player,
             self.engine.turn_number,
-            self.engine.round_number
+            self.engine.round_number,
+            self.engine.turn_subphase,
+            self.engine.actions_remaining_this_turn
         )
 
         # 2. Tracks de Cosechas
@@ -490,9 +511,15 @@ class ScreenManager:
 
         # Contador de acciones restantes este turno
         font_act = FontManager.get_font(13, bold=True)
-        act_txt = f"Acciones Loseta Restantes: {self.engine.actions_remaining_this_turn}"
+        act_txt = f"ACCIONES RESTANTES: {self.engine.actions_remaining_this_turn}"
         act_surf = font_act.render(act_txt, True, COLOR_GOLD_LIGHT)
-        self.surface.blit(act_surf, (725, 255))
+        act_badge = pygame.Rect(720, 249, 535, 22)
+        pygame.draw.rect(self.surface, COLOR_BG_PANEL, act_badge, border_radius=5)
+        pygame.draw.rect(self.surface, COLOR_GOLD_DARK, act_badge, width=1, border_radius=5)
+        self.surface.blit(act_surf, (act_badge.x + 9, act_badge.y + 3))
+        for action_idx in range(4):
+            dot_color = COLOR_GOLD if action_idx < self.engine.actions_remaining_this_turn else COLOR_GRAY_DARK
+            pygame.draw.circle(self.surface, dot_color, (act_badge.right - 72 + action_idx * 15, act_badge.centery), 4)
 
         # 7. Grid de Losetas del Jugador
         self.tile_grid.draw(self.surface, self.engine.current_player)

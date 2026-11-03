@@ -310,6 +310,13 @@ class TutorialScreen:
         cx = SCREEN_WIDTH // 2
         t_surf = self.font_title.render("ACADEMIA DEL FARAÓN: TUTORIAL PASO A PASO", True, COLOR_GOLD_LIGHT)
         self.surface.blit(t_surf, t_surf.get_rect(center=(cx, 32)))
+        progress_rect = pygame.Rect(510, 52, 260, 5)
+        pygame.draw.rect(self.surface, COLOR_BG_CARD, progress_rect, border_radius=3)
+        fill = pygame.Rect(progress_rect.x, progress_rect.y,
+                           int(progress_rect.width * self.current_lesson / self.total_lessons), progress_rect.height)
+        pygame.draw.rect(self.surface, COLOR_GOLD, fill, border_radius=3)
+        progress = self.font_small.render(f"LECCIÓN {self.current_lesson} DE {self.total_lessons}", True, COLOR_PAPYRUS)
+        self.surface.blit(progress, progress.get_rect(center=(cx, 62)))
 
     # -------------------------------------------------------------
     # CONTENIDOS DE CADA LECCIÓN

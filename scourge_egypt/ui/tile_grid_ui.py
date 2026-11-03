@@ -20,6 +20,7 @@ class TileGridUI:
         self.rect = rect
         self.on_tile_click = on_tile_click
         self.hovered_index: Optional[int] = None
+        self.mouse_pos = (0, 0)
         self.tile_rects: List[pygame.Rect] = []
 
         # 8 losetas dispuestas en 2 filas x 4 columnas
@@ -39,6 +40,7 @@ class TileGridUI:
 
     def handle_event(self, event: pygame.event.Event, player: Player) -> bool:
         if event.type == pygame.MOUSEMOTION:
+            self.mouse_pos = event.pos
             self.hovered_index = None
             for idx, r in enumerate(self.tile_rects):
                 if r.collidepoint(event.pos):
@@ -118,18 +120,29 @@ class TileGridUI:
 
     def _draw_tooltip(self, surface: pygame.Surface, tile: ActionTile):
         font = FontManager.get_font(12)
-        txt = f"{tile.name} ({tile.symbol_type}): {tile.description}"
-        t_w, t_h = font.size(txt)
-
-        mx, my = pygame.mouse.get_pos()
+        max_w = min(360, surface.get_width() - 32)
+        words = f"{tile.name} ({tile.symbol_type}): {tile.description}".split()
+        lines, line = [], ""
+        for word in words:
+            candidate = f"{line} {word}".strip()
+            if font.size(candidate)[0] <= max_w - 20:
+                line = candidate
+            else:
+                if line:
+                    lines.append(line)
+                line = word
+        if line:
+            lines.append(line)
+        t_w = max((font.size(item)[0] for item in lines), default=0)
+        t_h = len(lines) * 17
+        mx, my = self.mouse_pos
         tip_x = min(surface.get_width() - t_w - 20, max(10, mx - t_w // 2))
-        tip_y = my - 35
+        tip_y = my - t_h - 18
         if tip_y < 5:
-            tip_y = my + 25
+            tip_y = min(surface.get_height() - t_h - 16, my + 25)
 
-        tip_rect = pygame.Rect(tip_x, tip_y, t_w + 14, t_h + 8)
+        tip_rect = pygame.Rect(tip_x, tip_y, t_w + 20, t_h + 12)
         pygame.draw.rect(surface, (15, 12, 18), tip_rect, border_radius=4)
         pygame.draw.rect(surface, COLOR_GOLD, tip_rect, width=1, border_radius=4)
-
-        t_surf = font.render(txt, True, COLOR_PAPYRUS)
-        surface.blit(t_surf, (tip_x + 7, tip_y + 4))
+        for index, item in enumerate(lines):
+            surface.blit(font.render(item, True, COLOR_PAPYRUS), (tip_x + 10, tip_y + 6 + index * 17))

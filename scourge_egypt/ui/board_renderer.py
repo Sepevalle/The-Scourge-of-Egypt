@@ -28,7 +28,7 @@ class BoardRenderer:
         self.font_small = FontManager.get_font(11)
         self.font_body = FontManager.get_font(12)
 
-    def draw_hud(self, surface: pygame.Surface, board_state: BoardState, player: Player, turn_num: int, round_num: int):
+    def draw_hud(self, surface: pygame.Surface, board_state: BoardState, player: Player, turn_num: int, round_num: int, subphase: str = "", actions_remaining: int = 0):
         """Dibuja la barra superior del HUD (Ira de Dios, Mandamientos y Datos de Turno)."""
         sw = surface.get_width()
         hud_h = 70
@@ -41,7 +41,9 @@ class BoardRenderer:
         title_surf = self.font_header.render("THE SCOURGE OF EGYPT", True, COLOR_GOLD_LIGHT)
         surface.blit(title_surf, (15, 12))
 
-        sub_txt = f"Ronda {round_num} | Turno {turn_num} | Fase: {board_state.fase_actual}"
+        phase_names = {"DRAW_MOSES": "ROBA CARTA", "ACTIONS": "ELIGE ACCIONES", "END_TURN": "CIERRA TURNO"}
+        phase = phase_names.get(subphase, subphase.replace("_", " ") if subphase else board_state.fase_actual)
+        sub_txt = f"RONDA {round_num}  |  TURNO {turn_num}  |  {phase}"
         sub_surf = self.font_small.render(sub_txt, True, COLOR_PAPYRUS)
         surface.blit(sub_surf, (15, 42))
 
@@ -109,7 +111,7 @@ class BoardRenderer:
         pygame.draw.rect(surface, COLOR_BG_CARD, (p_x, p_y, 265, 54), border_radius=6)
         pygame.draw.rect(surface, player.color, (p_x, p_y, 265, 54), width=2, border_radius=6)
 
-        p_name_surf = self.font_sub.render(f"Turno: {player.nombre_faccion}", True, player.color)
+        p_name_surf = self.font_sub.render(f"JUEGA AHORA: {player.nombre_faccion}", True, player.color)
         surface.blit(p_name_surf, (p_x + 8, p_y + 6))
 
         stats_txt = f"Acólitos: {player.reserva_acolitos} | Fe: {player.tokens_fe} | Rerolls: {player.rerolls_disponibles}"
@@ -259,12 +261,12 @@ class BoardRenderer:
             surface.blit(n_surf, (c_rect.x + 10, c_rect.y + 30))
 
             # Descripción con salto de línea
-            self._render_multiline_text(surface, card.description, c_rect.x + 10, c_rect.y + 55, c_rect.width - 20)
+            self._render_multiline_text(surface, card.description, c_rect.x + 10, c_rect.y + 55, c_rect.width - 20, c_rect.bottom - 5)
         else:
             no_card = self.font_body.render("Pulsa 'Robar Carta de Moisés' para iniciar el turno.", True, COLOR_GRAY)
             surface.blit(no_card, (rect.x + 20, rect.y + 40))
 
-    def _render_multiline_text(self, surface: pygame.Surface, text: str, x: int, y: int, max_w: int):
+    def _render_multiline_text(self, surface: pygame.Surface, text: str, x: int, y: int, max_w: int, bottom: int):
         words = text.split(" ")
         lines = []
         cur = ""
@@ -279,7 +281,11 @@ class BoardRenderer:
             lines.append(cur)
 
         cur_y = y
-        for l in lines[:5]:
+        max_lines = max(1, (bottom - y) // 16)
+        visible_lines = lines[:max_lines]
+        if len(lines) > max_lines and visible_lines:
+            visible_lines[-1] = visible_lines[-1].rstrip(" .") + "..."
+        for l in visible_lines:
             surf = self.font_small.render(l, True, COLOR_PAPYRUS)
             surface.blit(surf, (x, cur_y))
-            cur_y += 18
+            cur_y += 16
