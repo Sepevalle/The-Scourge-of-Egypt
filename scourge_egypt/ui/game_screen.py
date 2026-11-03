@@ -147,6 +147,15 @@ class ScreenManager:
             on_click=self._on_draw_moses,
             font_size=13
         )
+        self.btn_card_details = Button(
+            rect=pygame.Rect(1040, 86, 200, 30),
+            text="VER DETALLE COMPLETO",
+            on_click=self._open_card_details,
+            font_size=11,
+            color_bg=COLOR_LAPIS,
+            color_hover=COLOR_LAPIS_LIGHT,
+            color_text=COLOR_WHITE,
+        )
         self.btn_roll_wheel = Button(
             rect=pygame.Rect(95, 330, 230, 36),
             text="GRACIA DEL FARAÓN (D6)",
@@ -241,6 +250,16 @@ class ScreenManager:
                 on_select=self._on_resolve_modal_choice,
                 screen_size=(SCREEN_WIDTH, SCREEN_HEIGHT)
             )
+
+    def _open_card_details(self):
+        if not self.engine or not self.engine.current_moses_card:
+            return
+        history = getattr(self.engine, "moses_card_history", [])
+        self.card_detail = CardDetailDialog(
+            self.engine.current_moses_card,
+            (SCREEN_WIDTH, SCREEN_HEIGHT),
+            history,
+        )
 
     def _on_resolve_modal_choice(self, option_index: int):
         if self.engine and self.engine.pending_choice:
@@ -403,13 +422,12 @@ class ScreenManager:
             return
 
         card_rect = pygame.Rect(720, 85, 535, 120)
+        self.btn_card_details.enabled = self.engine.current_moses_card is not None
+        if self.btn_card_details.handle_event(event):
+            return
         if (event.type == pygame.MOUSEBUTTONDOWN and event.button == 1
                 and card_rect.collidepoint(event.pos) and self.engine.current_moses_card):
-            self.card_detail = CardDetailDialog(
-                self.engine.current_moses_card,
-                (SCREEN_WIDTH, SCREEN_HEIGHT),
-                self.engine.moses_card_history,
-            )
+            self._open_card_details()
             return
 
         self.btn_draw_moses.handle_event(event)
@@ -543,6 +561,8 @@ class ScreenManager:
             self.engine.active_commandment,
             card_rect
         )
+        self.btn_card_details.enabled = self.engine.current_moses_card is not None
+        self.btn_card_details.draw(self.surface)
 
         # 5. Rueda Solar Interactiva
         active_god_names = [g.god_name for g in self.engine.current_player.dioses_activos]

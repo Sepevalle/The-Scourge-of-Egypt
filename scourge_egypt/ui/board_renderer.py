@@ -252,9 +252,6 @@ class BoardRenderer:
         surface.blit(title, (rect.x + 15, rect.y + 10))
 
         if card:
-            hint_font = FontManager.get_font(10, bold=True)
-            hint = hint_font.render("CLIC PARA LEER COMPLETA", True, COLOR_LAPIS_LIGHT)
-            surface.blit(hint, (rect.right - hint.get_width() - 15, rect.y + 12))
             # Marco de la carta
             c_rect = pygame.Rect(rect.x + 15, rect.y + 32, rect.width - 30, rect.height - 42)
             c_type = getattr(card, "card_type", "").lower()
