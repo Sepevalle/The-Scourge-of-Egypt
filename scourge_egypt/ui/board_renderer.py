@@ -175,7 +175,7 @@ class BoardRenderer:
 
         # Leyenda pequeña
         ley_txt = "Pos. >= 5: Alerta Hambruna | Pos. 10: Agotamiento (-1 Ganado)"
-        ley_surf = self.font_small.render(ley_txt, True, COLOR_GRAY)
+        ley_surf = self.font_small.render(ley_txt, True, COLOR_PAPYRUS)
         surface.blit(ley_surf, (rect.x + 15, rect.bottom - 22))
 
     def draw_reserves_and_bags(self, surface: pygame.Surface, board_state: BoardState, num_players: int, rect: pygame.Rect):
@@ -194,7 +194,7 @@ class BoardRenderer:
 
         # 2. Viviendas (Icono Casa/Pirámide)
         v_col = COLOR_CRIMSON if board_state.viviendas <= 5 else (180, 180, 190)
-        v_txt = f"Viviendas: {board_state.viviendas} cubos"
+        v_txt = f"Viviendas: {board_state.viviendas} cubos" + ("  |  NIVEL CRÍTICO" if board_state.viviendas <= 5 else "")
         v_surf = self.font_body.render(v_txt, True, v_col)
         draw_icon_house(surface, (rect.x + 22, rect.y + 61), 8, v_col)
         surface.blit(v_surf, (rect.x + 38, rect.y + 53))
@@ -214,6 +214,13 @@ class BoardRenderer:
         ba_surf = self.font_body.render(b_azul_txt, True, fe_col)
         draw_icon_star(surface, (rect.x + 22, rect.y + 101), 8, COLOR_LAPIS_LIGHT)
         surface.blit(ba_surf, (rect.x + 38, rect.y + 93))
+        faith_bar = pygame.Rect(rect.x + 38, rect.y + 116, rect.width - 55, 9)
+        pygame.draw.rect(surface, COLOR_BG_CARD, faith_bar, border_radius=4)
+        ratio = min(1.0, cur_fe / max(1, req_fe))
+        if ratio:
+            fill = pygame.Rect(faith_bar.x, faith_bar.y, max(4, int(faith_bar.width * ratio)), faith_bar.height)
+            pygame.draw.rect(surface, COLOR_LAPIS_LIGHT if cur_fe < req_fe else COLOR_GOLD, fill, border_radius=4)
+        pygame.draw.rect(surface, COLOR_GOLD_DARK, faith_bar, width=1, border_radius=4)
 
     def draw_active_card_area(self, surface: pygame.Surface, card: Optional[Card], commandment: Optional[CommandmentCard], rect: pygame.Rect):
         """Dibuja la carta actual de Moisés revelada y el mandamiento activo."""
@@ -224,6 +231,9 @@ class BoardRenderer:
         surface.blit(title, (rect.x + 15, rect.y + 10))
 
         if card:
+            hint_font = FontManager.get_font(10, bold=True)
+            hint = hint_font.render("CLIC PARA LEER COMPLETA", True, COLOR_LAPIS_LIGHT)
+            surface.blit(hint, (rect.right - hint.get_width() - 15, rect.y + 12))
             # Marco de la carta
             c_rect = pygame.Rect(rect.x + 15, rect.y + 32, rect.width - 30, rect.height - 42)
             c_type = getattr(card, "card_type", "").lower()

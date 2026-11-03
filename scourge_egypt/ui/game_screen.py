@@ -17,7 +17,7 @@ from scourge_egypt.ui.theme import (
     COLOR_CRIMSON, COLOR_CRIMSON_DARK, COLOR_EMERALD,
     COLOR_WHITE, COLOR_GRAY, COLOR_GRAY_DARK, COLOR_BLACK
 )
-from scourge_egypt.ui.components import Button, ModalDialog, GameLoggerUI
+from scourge_egypt.ui.components import Button, ModalDialog, GameLoggerUI, CardDetailDialog
 from scourge_egypt.ui.board_renderer import BoardRenderer
 from scourge_egypt.ui.solar_wheel_ui import SolarWheelUI
 from scourge_egypt.ui.tile_grid_ui import TileGridUI
@@ -51,6 +51,7 @@ class ScreenManager:
         self.exodus_b_view = ExodusBView(rect=pygame.Rect(20, 85, 1240, 495))
 
         self.active_modal: Optional[ModalDialog] = None
+        self.card_detail: Optional[CardDetailDialog] = None
         self.rules_scroll: int = 0
         self.tutorial_screen = TutorialScreen(surface=self.surface, on_exit=lambda: self.set_screen("MENU"))
 
@@ -187,9 +188,12 @@ class ScreenManager:
 
     def set_screen(self, screen_name: str):
         self.current_screen = screen_name
+        if screen_name != "GAME":
+            self.card_detail = None
         self.sound_manager.play("click")
 
     def start_new_game(self):
+        self.card_detail = None
         self.engine = GameEngine(
             num_players=self.num_players,
             faction_indices=self.selected_factions[:self.num_players]
@@ -201,6 +205,7 @@ class ScreenManager:
     def load_game(self):
         loaded = load_game_from_file("partida_guardada.json")
         if loaded:
+            self.card_detail = None
             self.engine = loaded
             self.current_screen = "GAME"
             self.sound_manager.play("fanfare")
@@ -349,6 +354,11 @@ class ScreenManager:
         if self.active_modal:
             self.active_modal.handle_event(event)
             return
+        if self.card_detail:
+            self.card_detail.handle_event(event)
+            if self.card_detail.closed:
+                self.card_detail = None
+            return
 
         self.logger_ui.handle_event(event)
 
@@ -363,6 +373,12 @@ class ScreenManager:
         # En Éxodo A
         if self.engine.board_state.fase_actual in ("VICTORIA", "DERROTA"):
             self.set_screen("GAME_OVER")
+            return
+
+        card_rect = pygame.Rect(720, 85, 535, 120)
+        if (event.type == pygame.MOUSEBUTTONDOWN and event.button == 1
+                and card_rect.collidepoint(event.pos) and self.engine.current_moses_card):
+            self.card_detail = CardDetailDialog(self.engine.current_moses_card, (SCREEN_WIDTH, SCREEN_HEIGHT))
             return
 
         self.btn_draw_moses.handle_event(event)
@@ -530,6 +546,8 @@ class ScreenManager:
         # 9. Modal de decisión si está activo
         if self.active_modal:
             self.active_modal.draw(self.surface)
+        if self.card_detail:
+            self.card_detail.draw(self.surface)
 
     def _draw_rules(self):
         cx = SCREEN_WIDTH // 2

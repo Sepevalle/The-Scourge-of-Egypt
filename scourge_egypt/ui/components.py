@@ -276,3 +276,103 @@ class GameLoggerUI:
             thumb_h = max(15, int(self.rect.height * (visible_lines / total_lines)))
             thumb_y = self.rect.y + int((self.rect.height - thumb_h) * (1.0 - (offset / max_scroll)))
             pygame.draw.rect(surface, COLOR_GOLD_DARK, (self.rect.right - 8, thumb_y, 5, thumb_h), border_radius=2)
+
+
+class CardDetailDialog:
+    """Vista ampliada y desplazable para consultar la descripción completa de una carta."""
+
+    def __init__(self, card, screen_size=(1280, 720)):
+        self.card = card
+        sw, sh = screen_size
+        self.rect = pygame.Rect(0, 0, min(860, sw - 80), min(610, sh - 60))
+        self.rect.center = (sw // 2, sh // 2)
+        self.scroll_offset = 0
+        self.font_title = FontManager.get_font(23, bold=True)
+        self.font_body = FontManager.get_font(17)
+        self.font_hint = FontManager.get_font(12)
+        self.btn_close = Button(
+            pygame.Rect(self.rect.right - 154, self.rect.bottom - 54, 130, 36),
+            "CERRAR",
+            on_click=self.close,
+            font_size=13,
+        )
+        self.closed = False
+
+    def close(self):
+        self.closed = True
+
+    def handle_event(self, event: pygame.event.Event):
+        if event.type == pygame.KEYDOWN and event.key in (pygame.K_ESCAPE, pygame.K_RETURN):
+            self.close()
+            return True
+        if event.type == pygame.MOUSEWHEEL:
+            self.scroll_offset = max(0, self.scroll_offset - event.y * 3)
+            return True
+        if self.btn_close.handle_event(event):
+            return True
+        if event.type in (pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP):
+            return True
+        return False
+
+    def _wrap_description(self, max_width):
+        lines = []
+        for paragraph in str(getattr(self.card, "description", "")).splitlines() or [""]:
+            if not paragraph.strip():
+                lines.append("")
+                continue
+            current = ""
+            for word in paragraph.split():
+                candidate = f"{current} {word}".strip()
+                if self.font_body.size(candidate)[0] <= max_width:
+                    current = candidate
+                else:
+                    if current:
+                        lines.append(current)
+                    current = word
+            if current:
+                lines.append(current)
+        return lines
+
+    def draw(self, surface: pygame.Surface):
+        overlay = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 205))
+        surface.blit(overlay, (0, 0))
+        pygame.draw.rect(surface, COLOR_BG_PANEL, self.rect, border_radius=12)
+        pygame.draw.rect(surface, COLOR_GOLD, self.rect, width=3, border_radius=12)
+
+        card_type = str(getattr(self.card, "card_type", "CARTA")).upper()
+        name = str(getattr(self.card, "name", "Carta de Moisés"))
+        badge = self.font_hint.render(card_type, True, COLOR_GOLD_LIGHT)
+        surface.blit(badge, (self.rect.x + 28, self.rect.y + 22))
+        title = self.font_title.render(name, True, COLOR_WHITE)
+        surface.blit(title, (self.rect.x + 28, self.rect.y + 46))
+        pygame.draw.line(surface, COLOR_GOLD_DARK,
+                         (self.rect.x + 26, self.rect.y + 86),
+                         (self.rect.right - 26, self.rect.y + 86), 1)
+
+        content = pygame.Rect(self.rect.x + 28, self.rect.y + 102,
+                              self.rect.width - 56, self.rect.height - 176)
+        lines = self._wrap_description(content.width)
+        line_height = 25
+        visible_count = max(1, content.height // line_height)
+        max_scroll = max(0, len(lines) - visible_count)
+        self.scroll_offset = min(self.scroll_offset, max_scroll)
+        old_clip = surface.get_clip()
+        surface.set_clip(content)
+        y = content.y
+        for line in lines[self.scroll_offset:self.scroll_offset + visible_count]:
+            if line:
+                surface.blit(self.font_body.render(line, True, COLOR_PAPYRUS), (content.x, y))
+            y += line_height
+        surface.set_clip(old_clip)
+
+        if max_scroll:
+            track = pygame.Rect(content.right - 5, content.y, 4, content.height)
+            pygame.draw.rect(surface, COLOR_BG_CARD, track, border_radius=2)
+            thumb_h = max(24, int(content.height * visible_count / len(lines)))
+            thumb_y = track.y + int((track.height - thumb_h) * self.scroll_offset / max_scroll)
+            pygame.draw.rect(surface, COLOR_GOLD, (track.x, thumb_y, track.width, thumb_h), border_radius=2)
+
+        hint = self.font_hint.render("Rueda del ratón para desplazarte · Esc para cerrar", True, COLOR_GRAY)
+        surface.blit(hint, (self.rect.x + 28, self.rect.bottom - 43))
+        self.btn_close.draw(surface)

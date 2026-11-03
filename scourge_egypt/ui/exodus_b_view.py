@@ -199,7 +199,11 @@ class ExodusBView:
             cy = cell_rect.y + 24
             # Círculo del carro con el color de su facción
             pygame.draw.circle(surface, p.color, (cx, cy), 6)
-            pygame.draw.circle(surface, COLOR_WHITE if not c.reverse_to_20 else (255, 230, 0), (cx, cy), 6, width=1)
+            outline = COLOR_GOLD_LIGHT if p is engine.current_player else COLOR_WHITE
+            if c.reverse_to_20:
+                outline = (255, 230, 0)
+            pygame.draw.circle(surface, outline, (cx, cy), 7 if p is engine.current_player else 6,
+                               width=2 if p is engine.current_player else 1)
             # ID de carro
             id_surf = self.font_small.render(str(c.carro_id), True, COLOR_BLACK)
             surface.blit(id_surf, (cx - 3, cy - 5))
@@ -232,7 +236,9 @@ class ExodusBView:
         surface.blit(adv_surf, (d_x, d_y + 48))
 
         # Columna 2: Estado del Mar y Peligros
-        sea_x = p_rect.x + 480
+        sea_x = p_rect.x + 650
+        pygame.draw.line(surface, COLOR_GOLD_DARK, (sea_x - 24, p_rect.y + 12),
+                         (sea_x - 24, p_rect.bottom - 12), 1)
         sea_txt = f"Límite Casillas Activas: {engine.board_state.casillas_activas_mar_rojo}/30"
         sea_surf = self.font_body.render(sea_txt, True, COLOR_BLUE_SEA if not engine.board_state.segundo_carro_en_20 else COLOR_CRIMSON)
         surface.blit(sea_surf, (sea_x, d_y + 15))
