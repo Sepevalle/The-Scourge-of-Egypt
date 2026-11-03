@@ -14,9 +14,11 @@ escritorio como el de la compilación web.
 El flujo de publicación está en
 [.github/workflows/deploy.yml](./.github/workflows/deploy.yml):
 
-1. Cada push a `main` o `staging` inicia automáticamente el despliegue. También
-   se puede iniciar manualmente desde **GitHub → Actions → Deploy game to
-   GitHub Pages → Run workflow**.
+1. Cada push a `main` inicia el despliegue. Cada push a `staging` ejecuta primero
+   **Validate staging build**; solo si compila correctamente, ese workflow
+   terminado inicia **Deploy game to GitHub Pages**. También se puede iniciar
+   manualmente desde **GitHub → Actions → Deploy game to GitHub Pages → Run
+   workflow**.
 2. GitHub Actions obtiene las dos ramas, prepara Python 3.12 e instala Pygbag.
    Construye la versión de `main` como producción y la de `staging` como
    previsualización, cada una en un directorio de trabajo separado.
@@ -28,10 +30,11 @@ El flujo de publicación está en
    [.github/scripts/version_web_archive.py](./.github/scripts/version_web_archive.py).
    Así la caché del navegador no reutiliza un paquete de una compilación
    anterior.
-5. Se publica el sitio combinado en GitHub Pages. Un push a `staging` actualiza
-   la previsualización, pero también recompila `main` en la raíz: el enlace de
-   producción sigue apuntando a la versión de `main`, nunca al código de
-   `staging`.
+5. Se publica el sitio combinado en GitHub Pages. El despliegue que sigue al
+   push de `staging` corre desde el workflow de la rama predeterminada, porque
+   el entorno `github-pages` puede restringir las ramas autorizadas. Aun así,
+   recompila la última `main` en la raíz y `staging` bajo `/preview/`; el código
+   de pruebas nunca reemplaza la versión de producción.
 
 El nombre versionado del archivo es importante: los navegadores y la CDN pueden
 conservar archivos estáticos en caché. Si se reemplazara el archivo con el mismo

@@ -1,0 +1,26 @@
+name: Validate staging build
+
+on:
+  push:
+    branches: [staging]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out staging branch
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Pygbag
+        run: python -m pip install pygbag
+
+      - name: Build staging game
+        run: python -m pygbag --build --title "The Scourge of Egypt - Preview" main.py
