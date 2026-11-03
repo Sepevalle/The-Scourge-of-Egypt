@@ -85,12 +85,14 @@ class ModalDialog:
         message: str,
         options: List[str],
         on_select: Callable[[int], None],
-        screen_size: Tuple[int, int] = (1280, 720)
+        screen_size: Tuple[int, int] = (1280, 720),
+        on_cancel: Optional[Callable[[], None]] = None
     ):
         self.title = title
         self.message = message
         self.options = options
         self.on_select = on_select
+        self.on_cancel = on_cancel
 
         sw, sh = screen_size
         self.width = min(600, sw - 80)
@@ -115,14 +117,46 @@ class ModalDialog:
             )
             self.buttons.append(btn)
 
+        self.cancel_button: Optional[Button] = None
+        if on_cancel:
+            cancel_rect = pygame.Rect(
+                self.rect.centerx - 90,
+                self.rect.bottom - 52,
+                180,
+                btn_h
+            )
+            self.cancel_button = Button(
+                rect=cancel_rect,
+                text="CANCELAR",
+                on_click=self._handle_cancel,
+                font_size=14,
+                color_bg=COLOR_BG_CARD,
+                color_hover=COLOR_CRIMSON,
+                color_text=COLOR_PAPYRUS
+            )
+
     def _handle_click(self, index: int):
         self.on_select(index)
 
+    def _handle_cancel(self):
+        if self.on_cancel:
+            self.on_cancel()
+
     def handle_event(self, event: pygame.event.Event) -> bool:
+        if (
+            self.on_cancel
+            and event.type == pygame.KEYDOWN
+            and event.key == pygame.K_ESCAPE
+        ):
+            self._handle_cancel()
+            return True
+
         # Bloquea clicks al fondo
         for btn in self.buttons:
             if btn.handle_event(event):
                 return True
+        if self.cancel_button and self.cancel_button.handle_event(event):
+            return True
         if event.type in (pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP):
             return True  # Consume el evento
         return False
@@ -168,6 +202,8 @@ class ModalDialog:
         # Botones de opciones
         for btn in self.buttons:
             btn.draw(surface)
+        if self.cancel_button:
+            self.cancel_button.draw(surface)
 
 
 class GameLoggerUI:

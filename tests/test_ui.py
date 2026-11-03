@@ -75,6 +75,49 @@ class TestUIHeadless(unittest.TestCase):
         sm.handle_event(click_event)
         self.assertEqual(sm.current_screen, "MENU")
 
+    def test_cancel_harvest_choice_without_spending_action(self):
+        sm = ScreenManager(self.surface)
+        sm.start_new_game()
+        tile_index = next(
+            i for i, tile in enumerate(sm.engine.current_player.losetas_accion)
+            if tile.id_name == "COSECHAR"
+        )
+        actions_before = sm.engine.actions_remaining_this_turn
+
+        sm._on_tile_clicked(tile_index)
+        self.assertIsNotNone(sm.active_modal)
+        self.assertIsNotNone(sm.active_modal.cancel_button)
+
+        cancel_event = pygame.event.Event(
+            pygame.MOUSEBUTTONDOWN,
+            {"button": 1, "pos": sm.active_modal.cancel_button.rect.center}
+        )
+        sm.handle_event(cancel_event)
+
+        self.assertIsNone(sm.active_modal)
+        self.assertEqual(sm.engine.actions_remaining_this_turn, actions_before)
+        self.assertEqual(
+            sm.engine.current_player.losetas_accion[tile_index].state,
+            "activa"
+        )
+
+    def test_escape_cancels_harvest_choice(self):
+        sm = ScreenManager(self.surface)
+        sm.start_new_game()
+        tile_index = next(
+            i for i, tile in enumerate(sm.engine.current_player.losetas_accion)
+            if tile.id_name == "COSECHAR"
+        )
+        sm._on_tile_clicked(tile_index)
+
+        sm.handle_event(pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_ESCAPE}))
+
+        self.assertIsNone(sm.active_modal)
+        self.assertEqual(
+            sm.engine.current_player.losetas_accion[tile_index].state,
+            "activa"
+        )
+
     def test_tutorial_screen_navigation_and_demos(self):
         sm = ScreenManager(self.surface)
 

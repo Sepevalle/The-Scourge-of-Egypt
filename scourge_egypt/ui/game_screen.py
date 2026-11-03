@@ -248,6 +248,7 @@ class ScreenManager:
                 message="Elige qué cultivo aliviar en 2 casillas:",
                 options=["Aliviar Trigo", "Aliviar Avena", "Aliviar Cebada"],
                 on_select=lambda idx: self._resolve_cosechar_tile(tile_index, idx),
+                on_cancel=self._cancel_cosechar_tile,
                 screen_size=(SCREEN_WIDTH, SCREEN_HEIGHT)
             )
             return
@@ -260,6 +261,11 @@ class ScreenManager:
         crops = ["trigo", "avena", "cebada"]
         crop = crops[crop_option_idx]
         self.engine.use_action_tile(tile_index, extra_param=crop)
+        self.active_modal = None
+
+    def _cancel_cosechar_tile(self):
+        if self.engine:
+            self.engine.log("Selección de cosecha cancelada; no se gastó la acción.")
         self.active_modal = None
 
     def _on_roll_solar_wheel(self):
