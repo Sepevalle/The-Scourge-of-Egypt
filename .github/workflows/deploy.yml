@@ -2,7 +2,7 @@ name: Deploy game to GitHub Pages
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, staging]
   workflow_dispatch:
 
 permissions:
@@ -18,8 +18,16 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out repository
+      - name: Check out production branch
         uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Check out staging branch
+        uses: actions/checkout@v4
+        with:
+          ref: staging
+          path: source/preview
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -29,39 +37,24 @@ jobs:
       - name: Install Pygbag
         run: python -m pip install pygbag
 
-      - name: Build browser game
+      - name: Build production game
         run: python -m pygbag --build --title "The Scourge of Egypt" main.py
 
-      - name: Version game archive to avoid stale browser caches
-        env:
-          BUILD_SHA: ${{ github.sha }}
+      - name: Version production game archive
+        run: python .github/scripts/version_web_archive.py .
+
+      - name: Build staging game
+        working-directory: source/preview
+        run: python -m pygbag --build --title "The Scourge of Egypt - Preview" main.py
+
+      - name: Version staging game archive
+        run: python .github/scripts/version_web_archive.py source/preview
+
+      - name: Assemble production and staging site
         run: |
-          python - <<'PY'
-          import os
-          import shutil
-          from pathlib import Path
-
-          web_dir = Path("build/web")
-          source_archives = list(web_dir.glob("*.tar.gz"))
-          if len(source_archives) != 1:
-              raise RuntimeError("Expected exactly one Pygbag web archive")
-          source_archive = source_archives[0]
-          archive_name = (
-              f"{source_archive.name[:-len('.tar.gz')]}-"
-              f"{os.environ['BUILD_SHA'][:12]}.tar.gz"
-          )
-          shutil.copyfile(source_archive, web_dir / archive_name)
-
-          index_file = web_dir / "index.html"
-          html = index_file.read_text(encoding="utf-8")
-          archive_reference = source_archive.name
-          if html.count(archive_reference) != 1:
-              raise RuntimeError("Unexpected Pygbag archive reference in index.html")
-          index_file.write_text(
-              html.replace(archive_reference, archive_name),
-              encoding="utf-8"
-          )
-          PY
+          mkdir -p site/preview
+          cp -a build/web/. site/
+          cp -a source/preview/build/web/. site/preview/
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
@@ -69,7 +62,7 @@ jobs:
       - name: Upload web build
         uses: actions/upload-pages-artifact@v3
         with:
-          path: build/web
+          path: site
 
   deploy:
     environment:

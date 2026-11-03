@@ -14,23 +14,46 @@ escritorio como el de la compilación web.
 El flujo de publicación está en
 [.github/workflows/deploy.yml](./.github/workflows/deploy.yml):
 
-1. Se ejecuta automáticamente al subir cambios a `main` o `master`. También se
-   puede iniciar manualmente desde **GitHub → Actions → Deploy game to GitHub
-   Pages → Run workflow**.
-2. GitHub Actions prepara Python 3.12, instala Pygbag y construye el juego con
-   `python -m pygbag --build --title "The Scourge of Egypt" main.py`.
-3. Pygbag genera el sitio estático en `build/web`. El flujo toma el único
-   archivo `.tar.gz` generado, le añade los primeros 12 caracteres del SHA del
-   commit y actualiza la referencia en `index.html`. Por ejemplo:
-   `the.scourge.of.egypt-bbc1093e9c4c.tar.gz`.
-4. Se publica `build/web` como artefacto de GitHub Pages y `actions/deploy-pages`
-   lo sirve en la URL del proyecto.
+1. Cada push a `main` o `staging` inicia automáticamente el despliegue. También
+   se puede iniciar manualmente desde **GitHub → Actions → Deploy game to
+   GitHub Pages → Run workflow**.
+2. GitHub Actions obtiene las dos ramas, prepara Python 3.12 e instala Pygbag.
+   Construye la versión de `main` como producción y la de `staging` como
+   previsualización, cada una en un directorio de trabajo separado.
+3. Las dos compilaciones se combinan en un solo sitio: la producción queda en
+   la raíz (`/The-Scourge-of-Egypt/`) y staging en
+   `/The-Scourge-of-Egypt/preview/`.
+4. Antes de combinarse, a cada archivo `.tar.gz` se le añade el SHA de su
+   propio commit mediante
+   [.github/scripts/version_web_archive.py](./.github/scripts/version_web_archive.py).
+   Así la caché del navegador no reutiliza un paquete de una compilación
+   anterior.
+5. Se publica el sitio combinado en GitHub Pages. Un push a `staging` actualiza
+   la previsualización, pero también recompila `main` en la raíz: el enlace de
+   producción sigue apuntando a la versión de `main`, nunca al código de
+   `staging`.
 
 El nombre versionado del archivo es importante: los navegadores y la CDN pueden
 conservar archivos estáticos en caché. Si se reemplazara el archivo con el mismo
 nombre, el HTML nuevo podría cargar el juego antiguo durante varios minutos.
-No elimines el paso **Version game archive to avoid stale browser caches** ni
-hagas que `index.html` siga apuntando al nombre fijo del archivo.
+No elimines el versionado de archivos ni hagas que `index.html` apunte al nombre
+fijo del archivo.
+
+## Flujo de pruebas y promoción
+
+- `main` es producción. Su URL pública es
+  <https://sepevalle.github.io/The-Scourge-of-Egypt/>.
+- `staging` es la rama de pruebas. Su URL independiente es
+  <https://sepevalle.github.io/The-Scourge-of-Egypt/preview/>.
+- Haz y sube los cambios de prueba a `staging`; espera a que **Deploy game to
+  GitHub Pages** termine correctamente y valida el juego en `/preview/`.
+- Cuando estén listos, integra `staging` en `main` mediante un pull request.
+  El despliegue de `main` publica el cambio en la URL de producción. Mantén
+  después `staging` sincronizada con `main` antes de empezar otra ronda de
+  pruebas.
+- No configures un segundo origen de Pages ni despliegues staging por separado:
+  GitHub Pages sirve un solo sitio para este repositorio. El workflow mantiene
+  ambos directorios juntos en cada publicación.
 
 ## Requisitos para cambios de código
 
