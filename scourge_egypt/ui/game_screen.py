@@ -34,6 +34,8 @@ class ScreenManager:
         self.current_screen: str = "MENU"   # 'MENU', 'GAME', 'RULES', 'GAME_OVER'
 
         self.engine: Optional[GameEngine] = None
+        self.turn_start_snapshot: Dict[str, int] = {}
+        self.resource_trends: Dict[str, int] = {}
         self.board_renderer = BoardRenderer()
         self.sound_manager = SoundManager.get_instance()
 
@@ -199,6 +201,8 @@ class ScreenManager:
             faction_indices=self.selected_factions[:self.num_players]
         )
         self.engine.start_turn()
+        self.resource_trends = {}
+        self.turn_start_snapshot = self._capture_resource_snapshot()
         self.current_screen = "GAME"
         self.sound_manager.play("fanfare")
 
@@ -207,6 +211,8 @@ class ScreenManager:
         if loaded:
             self.card_detail = None
             self.engine = loaded
+            self.resource_trends = {}
+            self.turn_start_snapshot = self._capture_resource_snapshot()
             self.current_screen = "GAME"
             self.sound_manager.play("fanfare")
         else:
@@ -301,8 +307,29 @@ class ScreenManager:
     def _on_end_turn(self):
         if not self.engine:
             return
+        current = self._capture_resource_snapshot()
+        self.resource_trends = {
+            key: current.get(key, 0) - self.turn_start_snapshot.get(key, current.get(key, 0))
+            for key in current
+        }
         self.engine.end_turn()
+        self.turn_start_snapshot = self._capture_resource_snapshot()
         self.sound_manager.play("click")
+
+    def _capture_resource_snapshot(self) -> Dict[str, int]:
+        if not self.engine:
+            return {}
+        board = self.engine.board_state
+        return {
+            "ira": board.ira_de_dios,
+            "trigo": board.cosechas.get("trigo", 0),
+            "avena": board.cosechas.get("avena", 0),
+            "cebada": board.cosechas.get("cebada", 0),
+            "ganado": board.ganado,
+            "viviendas": board.viviendas,
+            "fe_bolsa": len(board.bolsa_almacenamiento_fe),
+            "tumbas": len(board.bolsa_tumbas_egipcias),
+        }
 
     def _on_save_game(self):
         if self.engine:
@@ -378,7 +405,11 @@ class ScreenManager:
         card_rect = pygame.Rect(720, 85, 535, 120)
         if (event.type == pygame.MOUSEBUTTONDOWN and event.button == 1
                 and card_rect.collidepoint(event.pos) and self.engine.current_moses_card):
-            self.card_detail = CardDetailDialog(self.engine.current_moses_card, (SCREEN_WIDTH, SCREEN_HEIGHT))
+            self.card_detail = CardDetailDialog(
+                self.engine.current_moses_card,
+                (SCREEN_WIDTH, SCREEN_HEIGHT),
+                self.engine.moses_card_history,
+            )
             return
 
         self.btn_draw_moses.handle_event(event)
@@ -492,16 +523,17 @@ class ScreenManager:
             self.engine.turn_number,
             self.engine.round_number,
             self.engine.turn_subphase,
-            self.engine.actions_remaining_this_turn
+            self.engine.actions_remaining_this_turn,
+            self.resource_trends,
         )
 
         # 2. Tracks de Cosechas
         cosecha_rect = pygame.Rect(20, 85, 390, 150)
-        self.board_renderer.draw_harvest_tracks(self.surface, self.engine.board_state, cosecha_rect)
+        self.board_renderer.draw_harvest_tracks(self.surface, self.engine.board_state, cosecha_rect, self.resource_trends)
 
         # 3. Reservas y Bolsas Sagradas
         reserva_rect = pygame.Rect(425, 85, 275, 150)
-        self.board_renderer.draw_reserves_and_bags(self.surface, self.engine.board_state, self.engine.num_players, reserva_rect)
+        self.board_renderer.draw_reserves_and_bags(self.surface, self.engine.board_state, self.engine.num_players, reserva_rect, self.resource_trends)
 
         # 4. Carta de Moisés Activa
         card_rect = pygame.Rect(720, 85, 535, 120)

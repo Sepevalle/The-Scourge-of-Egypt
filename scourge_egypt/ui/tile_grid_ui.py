@@ -29,13 +29,14 @@ class TileGridUI:
         padding_x = 8
         padding_y = 8
         tile_w = (rect.width - (cols + 1) * padding_x) // cols
-        tile_h = (rect.height - (rows + 1) * padding_y) // rows
+        header_h = 24
+        tile_h = (rect.height - header_h - (rows + 1) * padding_y) // rows
 
         self.tile_rects = []
         for r in range(rows):
             for c in range(cols):
                 tx = rect.x + padding_x + c * (tile_w + padding_x)
-                ty = rect.y + padding_y + r * (tile_h + padding_y)
+                ty = rect.y + header_h + padding_y + r * (tile_h + padding_y)
                 self.tile_rects.append(pygame.Rect(tx, ty, tile_w, tile_h))
 
     def handle_event(self, event: pygame.event.Event, player: Player) -> bool:
@@ -64,6 +65,14 @@ class TileGridUI:
         # Panel contenedor
         pygame.draw.rect(surface, COLOR_BG_PANEL, self.rect, border_radius=8)
         pygame.draw.rect(surface, COLOR_GOLD_DARK, self.rect, width=2, border_radius=8)
+        available = sum(1 for tile in player.losetas_accion if tile.state == "activa")
+        used = sum(1 for tile in player.losetas_accion if tile.state == "usada_boca_abajo")
+        destroyed = sum(1 for tile in player.losetas_accion if tile.state not in ("activa", "usada_boca_abajo"))
+        heading = FontManager.get_font(11, bold=True).render(
+            f"LOSETA DE ACCIÓN     {available} DISPONIBLES  ·  {used} USADAS  ·  {destroyed} DESTRUIDAS",
+            True, COLOR_GOLD_LIGHT
+        )
+        surface.blit(heading, (self.rect.x + 10, self.rect.y + 5))
 
         font_name = FontManager.get_font(13, bold=True)
         font_sub = FontManager.get_font(11)
@@ -98,8 +107,8 @@ class TileGridUI:
             pygame.draw.rect(surface, border_col, rect, width=2 if is_hovered else 1, border_radius=6)
 
             # Icono central de la loseta
-            icon_size = max(8, min(rect.height // 4, 14))
-            icon_center = (rect.centerx, rect.top + rect.height // 2 - 4)
+            icon_size = max(8, min(rect.height // 5, 12))
+            icon_center = (rect.centerx, rect.top + rect.height // 2 - 2)
             icon_col = text_col if tile.state == "activa" else status_col
             draw_tile_icon(surface, tile.name, icon_center, icon_size, icon_col)
 
@@ -121,7 +130,12 @@ class TileGridUI:
     def _draw_tooltip(self, surface: pygame.Surface, tile: ActionTile):
         font = FontManager.get_font(12)
         max_w = min(360, surface.get_width() - 32)
-        words = f"{tile.name} ({tile.symbol_type}): {tile.description}".split()
+        state_label = {
+            "activa": "DISPONIBLE",
+            "usada_boca_abajo": "USADA ESTE TURNO",
+            "destruida": "DESTRUIDA",
+        }.get(tile.state, tile.state.upper())
+        words = f"{tile.name} · {state_label} · {tile.symbol_type}: {tile.description}".split()
         lines, line = [], ""
         for word in words:
             candidate = f"{line} {word}".strip()
