@@ -25,4 +25,6 @@ Abre <http://localhost:8000> y espera a que termine la carga.
 4. Cuando el flujo termine, GitHub Pages mostrará el enlace público del juego.
 
 La compilación incluye Pygame CE y NumPy como dependencias del juego. En
-navegadores, «Salir» vuelve al menú en vez de cerrar la página.
+navegadores, «Salir» vuelve al menú en vez de cerrar la página. El archivo web
+se publica con un nombre versionado para que las actualizaciones no reutilicen
+una copia antigua guardada en la caché del navegador.
